@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Watch Tracker • Dashboard</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <header>
+    <div class="bar">
+      <div class="logo"><span class="logo-icon"></span><span>Dashboard</span></div>
+      <div class="spacer"></div>
+      <a class="link-btn" href="index.html">🏠 Overview</a>
+      <a class="link-btn" href="admin.html">🛠 Admin</a>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="grid">
+      <section class="card" style="padding:14px">
+        <h2>Totals</h2>
+        <div id="totals" class="muted">Loading…</div>
+      </section>
+      <section class="card" style="padding:14px">
+        <h2>Average Rating</h2>
+        <canvas id="avgChart"></canvas>
+      </section>
+    </div>
+
+    <section class="row">
+      <h2>Top Genres</h2>
+      <canvas id="genreChart"></canvas>
+    </section>
+
+    <section class="row">
+      <h2>Status Distribution</h2>
+      <canvas id="statusChart"></canvas>
+    </section>
+  </main>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+    async function loadConfig(){
+      for (const p of ["firebase.config.json","firebase.config.example.json"]) { try { const r = await fetch(p); if(r.ok) return r.json(); } catch(e) {} }
+      throw new Error("Missing firebase.config.json");
+    }
+    const cfg = await loadConfig();
+    const app = initializeApp(cfg);
+    const db  = getFirestore(app);
+
+    async function fetchAll(){
+      const out = { movies:[], series:[] };
+      for (const name of ["movies","series"]) {
+        const snap = await getDocs(collection(db,name));
+        snap.forEach(doc=> out[name].push({ id:doc.id, ...doc.data() }));
+      }
+      return out;
+    }
+
+    function avg(nums){ return nums.length? (nums.reduce((a,b)=>a+b,0)/nums.length) : 0; }
+    function countBy(arr, fn){ const m=new Map(); arr.forEach(x=>{ const k=fn(x); m.set(k,(m.get(k)||0)+1); }); return m; }
+
+    function renderTotals(data){
+      const totals = document.getElementById('totals');
+      const mv = data.movies.length, sv = data.series.length;
+      const mDone = data.movies.filter(x=>x.status==='Completed').length;
+      const sDone = data.series.filter(x=>x.seasons && x.seasons.every(s=> (s.episodes||[]).every(e=>e.watched))).length;
+      totals.innerHTML = `<div>Movies: <strong>${mv}</strong> (Completed: ${mDone})</div><div>Series: <strong>${sv}</strong> (Finished: ${sDone})</div>`;
+    }
+
+    function renderAvg(data){
+      const aMovie = avg(data.movies.map(x=>Number(x.rating||0)).filter(Boolean));
+      const aSeries = avg(data.series.map(x=>Number(x.rating||0)).filter(Boolean));
+      new Chart(document.getElementById('avgChart'), { type:'bar', data:{ labels:['Movies','Series'], datasets:[{ label:'Avg ★', data:[aMovie,aSeries] }] }, options:{ plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true,max:5}} });
+    }
+
+    function renderGenres(data){
+      const genres = [...data.movies, ...data.series].flatMap(x=>x.genres||[]);
+      const m = countBy(genres, g=>g);
+      const pairs = [...m.entries()].sort((a,b)=>b[1]-a[1]).slice(0,10);
+      new Chart(document.getElementById('genreChart'), { type:'bar', data:{ labels:pairs.map(p=>p[0]), datasets:[{ label:'Count', data:pairs.map(p=>p[1]) }] }, options:{ plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true}} } });
+    }
+
+    function renderStatus(data){
+      const statuses = [...data.movies].map(x=>x.status||'Unknown');
+      const m = countBy(statuses, s=>s);
+      const pairs = [...m.entries()].sort((a,b)=>b[1]-a[1]);
+      new Chart(document.getElementById('statusChart'), { type:'doughnut', data:{ labels:pairs.map(p=>p[0]), datasets:[{ data:pairs.map(p=>p[1]) }] }, options:{} });
+    }
+
+    try {
+      const data = await fetchAll();
+      renderTotals(data);
+      renderAvg(data);
+      renderGenres(data);
+      renderStatus(data);
+    } catch(err){
+      console.warn('Firestore failed, falling back to sample-data.json', err);
+      const res = await fetch('sample-data.json'); const json = await res.json();
+      const data = { movies: json.movies, series: json.series };
+      renderTotals(data); renderAvg(data); renderGenres(data); renderStatus(data);
+    }
+  </script>
+</body>
+</html>

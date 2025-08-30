@@ -1,0 +1,157 @@
+/* Shared styles for Watch Tracker (index, dashboard, admin) */
+:root{
+  --bg:#0A0A0A; --text:#ECECEC; --muted:#BBBBBB; --card:#121212; --border:#1f1f1f;
+  --accent:#2dd4bf; --chip:#171717; --chip-press:#1e1e1e; --warn:#f59e0b; --bad:#ef4444; --good:#22c55e;
+  --radius:16px; --shadow:0 10px 30px rgba(0,0,0,.35);
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Noto Sans",sans-serif;
+  line-height:1.5;
+}
+img{max-width:100%;display:block}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+.container{max-width:1200px;margin:0 auto;padding:16px}
+.muted{color:var(--muted)}
+
+/* Header */
+header{
+  position:sticky; top:0; z-index:50;
+  background:linear-gradient(180deg,rgba(10,10,10,.95),rgba(10,10,10,.7));
+  backdrop-filter:blur(6px); border-bottom:1px solid var(--border);
+}
+.bar{display:flex;align-items:center;gap:12px;padding:12px 16px}
+.logo{display:flex;align-items:center;gap:10px;font-weight:700}
+.logo-icon{
+  width:28px;height:28px;border-radius:50%;
+  background:radial-gradient(circle at 30% 30%,#48e1cf,#1b766c);
+  box-shadow:0 0 20px rgba(45,212,191,.35)
+}
+.spacer{flex:1}
+.icon-btn,.link-btn{
+  background:var(--chip); border:1px solid var(--border); color:var(--text);
+  padding:8px 12px; border-radius:12px; cursor:pointer;
+  display:inline-flex; align-items:center; gap:6px;
+}
+.icon-btn:hover,.link-btn:hover{background:var(--chip-press)}
+
+/* Filters */
+.filters{
+  display:flex; flex-wrap:wrap; gap:8px;
+  padding:10px 16px; border-bottom:1px solid var(--border)
+}
+.chip{
+  display:inline-flex; align-items:center; gap:8px;
+  padding:8px 12px; border-radius:999px;
+  background:var(--chip); border:1px solid var(--border)
+}
+.chip select,.chip input{background:transparent;color:var(--text);border:none;outline:none}
+.chip label{opacity:.8;font-size:.9rem}
+.sort{margin-left:auto}
+
+/* Rows */
+.row{margin:20px 0}
+.row h2{margin:0 0 10px 8px;font-size:1.1rem;opacity:.9}
+.scroller{
+  display:flex; gap:12px; overflow:auto;
+  padding:6px 6px 6px 8px; scroll-snap-type:x mandatory
+}
+
+/* Card – full width by default; small only inside scrollers */
+.card{
+  background:var(--card); border:1px solid var(--border);
+  border-radius:14px; box-shadow:var(--shadow);
+  transition:transform .18s ease, box-shadow .18s ease;
+}
+.card:hover{transform:translateY(-3px);box-shadow:0 14px 34px rgba(0,0,0,.45)}
+
+/* Small gallery cards */
+.scroller .card{width:168px; flex:0 0 auto; scroll-snap-align:start}
+
+.poster{
+  position:relative; width:100%; aspect-ratio:2/3;
+  border-radius:12px 12px 0 0; overflow:hidden; background:#0f0f0f
+}
+.poster img{width:100%;height:100%;object-fit:cover}
+.badge-bar{position:absolute;left:6px;right:6px;bottom:6px;display:flex;flex-wrap:wrap;gap:4px}
+.badge{
+  background:rgba(0,0,0,.6); backdrop-filter:blur(2px);
+  border:1px solid rgba(255,255,255,.08); padding:2px 6px;
+  border-radius:999px; font-size:.7rem
+}
+.card-body{padding:10px}
+.title{font-weight:700;font-size:.95rem;line-height:1.2}
+.subtitle{font-size:.78rem;opacity:.7}
+.stars{font-size:.9rem;letter-spacing:1px;margin:6px 0}
+.progress{height:6px;background:#1b1b1b;border-radius:999px;overflow:hidden;border:1px solid var(--border)}
+.progress span{display:block;height:100%;background:var(--accent);width:0}
+.actions{display:flex;gap:6px;margin-top:8px}
+.btn{
+  flex:1; display:inline-flex; justify-content:center; align-items:center;
+  padding:6px 8px; border-radius:10px; border:1px solid var(--border);
+  background:var(--chip); font-size:.8rem; cursor:pointer
+}
+.btn:hover{background:var(--chip-press)}
+.btn.active{background:rgba(45,212,191,.15);border-color:var(--accent)}
+
+/* Tables & forms */
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.field{display:flex;flex-direction:column;gap:6px}
+.field input,.field select,.field textarea{
+  padding:10px; border-radius:10px; border:1px solid var(--border);
+  background:#0d0d0d; color:var(--text)
+}
+.table{width:100%;border-collapse:collapse;margin-top:8px}
+.table th,.table td{border:1px solid var(--border);padding:8px;text-align:left}
+.table th{background:#0f0f0f}
+.toolbar{
+  display:flex; gap:12px; margin:12px 0;
+  flex-wrap:wrap; align-items:center; /* keeps auth line neat */
+}
+
+/* Overlays */
+.overlay{
+  position:fixed; inset:0; background:rgba(0,0,0,.65); backdrop-filter:blur(4px);
+  display:none; align-items:flex-start; justify-content:center; padding-top:8vh
+}
+.panel{
+  width:min(900px,92vw); background:var(--card); border:1px solid var(--border);
+  border-radius:16px; padding:14px
+}
+.panel h3{margin:8px 0 6px 2px}
+.panel .muted{color:var(--muted);font-size:.9rem}
+.panel .row-body{max-height:60vh;overflow:auto;margin-top:10px}
+.avatar{
+  width:32px;height:32px;border-radius:50%;
+  background:#0f0f0f;border:1px solid var(--border);
+  display:none;align-items:center;justify-content:center;font-weight:700
+}
+
+/* Toast */
+.toast{
+  position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
+  background:#111; border:1px solid var(--border);
+  padding:10px 14px; border-radius:10px; display:none; box-shadow:var(--shadow)
+}
+
+/* Misc */
+.ep{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)}
+.ep code{opacity:.8}
+.ep .sp{margin-left:auto}
+.pill{display:inline-flex;gap:6px;align-items:center;background:var(--chip);border:1px solid var(--border);padding:6px 10px;border-radius:999px}
+
+/* Make content cards (admin/dashboard sections) full width nicely */
+main .card{width:auto;max-width:980px;margin:16px auto}
+
+/* Responsive */
+@media (max-width:1100px){
+  main .card{max-width:100%}
+}
+@media (max-width:800px){
+  .grid{grid-template-columns:1fr}
+  .scroller .card{width:150px}
+}
