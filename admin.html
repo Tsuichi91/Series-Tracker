@@ -6,7 +6,7 @@
   <title>Watch Tracker • Admin</title>
   <link rel="stylesheet" href="styles.css" />
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
-  <!-- NEW: XLSX support -->
+  <!-- XLSX support -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body>
@@ -31,13 +31,13 @@
       </div>
     </section>
 
-    <!-- Gate message shown until the user is both signed in AND verified via Firestore collection -->
+    <!-- Gate (sign-in + verification via Firestore collection) -->
     <section class="card" id="accessCard" style="padding:14px">
       <h2>Access</h2>
       <div id="gateMsg" class="muted">Please sign in to see the admin tools.</div>
     </section>
 
-    <!-- All admin tools live here; hidden until authorized -->
+    <!-- Admin tools (hidden until authorized) -->
     <div id="adminContent" style="display:none">
       <section class="card" style="padding:14px">
         <h2>Quick Add</h2>
@@ -61,12 +61,17 @@
       </section>
 
       <section class="card" style="padding:14px">
-        <h2>Import (CSV/XLSX) • Mapping & Duplicates</h2>
+        <h2>Import (CSV/XLSX) • Mapping & Workbook</h2>
         <div class="toolbar">
           <label class="icon-btn" for="csvFile">Choose CSV/XLSX</label>
           <input id="csvFile" type="file" accept=".csv,.xlsx,.xls" style="display:none" />
           <span class="pill">Dataset
-            <select id="mapDataset"><option value="movies">movies</option><option value="series">series</option></select>
+            <!-- Achtung: 'episodes' nur für CSV/Einzelsheet; XLSX-Workbook wird automatisch erkannt -->
+            <select id="mapDataset">
+              <option value="movies">movies</option>
+              <option value="series">series</option>
+              <option value="episodes">episodes</option>
+            </select>
           </span>
           <span class="pill">Duplicates
             <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="chkDupSlug" checked> slug</label>
@@ -111,7 +116,7 @@
     const avatar = document.getElementById('avatar');
     const info   = document.getElementById('authInfo');
 
-    function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.style.display='block'; setTimeout(()=>t.style.display='none',1500); }
+    function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.style.display='block'; setTimeout(()=>t.style.display='none',1800); }
 
     document.getElementById('btnSignIn').addEventListener('click', async()=>{ await signInWithPopup(auth, provider); });
     document.getElementById('btnSignOut').addEventListener('click', async()=>{ await signOut(auth); });
@@ -127,7 +132,7 @@
         const snap = await getDoc(ref);
         if(snap.exists()){
           const d = snap.data();
-          return (d.active !== false) && (d.role === 'admin' || d.admin === true || (Array.isArray(d.roles) && d.roles.includes('admin')) || true);
+          return (d.active !== false) && (d.role === 'admin' || d.admin === true || (Array.isArray(d.roles) && d.roles.includes('admin')));
         }
       }catch(err){ console.warn('Access check failed', err); }
       return false;
@@ -172,6 +177,7 @@
     // ---------- Data model fields ----------
     const MOVIE_FIELDS = ["id","type","slug","title_en","title_original","year","poster","backdrop","short_description","genres","age_rating","runtime_min","release_date","franchise","status","rating","favorite","on_watchlist","tags","rewatch_count","rewatch_dates","last_position_seconds","created_at","updated_at"];
     const SERIES_FIELDS = ["id","type","slug","title_en","title_original","year","poster","backdrop","short_description","genres","age_rating","series_status","platform","episode_length_min","status","rating","favorite","on_watchlist","tags","rewatch_count","rewatch_dates","created_at","updated_at"];
+    const EPISODE_FIELDS = ["series_slug","season_number","episode_number","code","title","air_date","watched","rating","notes","runtime_min"];
 
     function slugify(title, year){ return (title+"-"+year).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,''); }
 
@@ -203,29 +209,28 @@
       showToast('Saved'); fillContentTable();
     });
 
-    // ---------- Import (CSV/XLSX) with mapping ----------
-    const importCtx = { headers:[], rows:[], mapping:{}, dataset:'movies' };
+    // ---------- Import context ----------
+    const importCtx = { headers:[], rows:[], mapping:{}, dataset:'movies', workbook:null };
 
-    // Parse first sheet of an XLSX/XLS file into array of row objects
-    function parseXLSXRows(file){
-      return new Promise((resolve,reject)=>{
-        const reader = new FileReader();
-        reader.onload = evt => {
-          try{
-            const data = new Uint8Array(evt.target.result);
-            const wb = XLSX.read(data, { type:'array' });
-            const ws = wb.Sheets[wb.SheetNames[0]];
-            const rows = XLSX.utils.sheet_to_json(ws, { defval:"" }); // keep empty cells
-            resolve(rows);
-          }catch(err){ reject(err); }
-        };
-        reader.onerror = reject;
-        reader.readAsArrayBuffer(file);
-      });
-    }
-
+    // ---------- Mapping UI ----------
     function buildMapUI(){
-      const fields = (importCtx.dataset==='movies'? MOVIE_FIELDS : SERIES_FIELDS);
+      const dataset = importCtx.dataset;
+      if (dataset === 'workbook'){
+        // Kein Mapping nötig – nur Info anzeigen
+        const s = importCtx.workbook?.series?.length || 0;
+        const se = importCtx.workbook?.seasons?.length || 0;
+        const ep = importCtx.workbook?.episodes?.length || 0;
+        document.getElementById('mapTable').innerHTML =
+          `<div class="pill">Workbook detected: <strong>series ${s}</strong> • <strong>seasons ${se}</strong> • <strong>episodes ${ep}</strong></div>`;
+        document.getElementById('mapPreview').innerHTML = '';
+        return;
+      }
+
+      const fields =
+        dataset==='movies'  ? MOVIE_FIELDS  :
+        dataset==='series'  ? SERIES_FIELDS :
+        /* episodes */        EPISODE_FIELDS;
+
       importCtx.mapping = Object.fromEntries(fields.map(f=> [f, importCtx.headers.includes(f)? f : ""]));
       const sel = (name,val)=> `<select data-map="${name}"><option value="">(none)</option>${importCtx.headers.map(h=>`<option ${h===val?'selected':''}>${h}</option>`).join('')}</select>`;
       const rows = fields.map(f=> `<tr><td>${f}</td><td>${sel(f, importCtx.mapping[f])}</td></tr>`).join('');
@@ -235,7 +240,12 @@
     }
 
     function buildPreview(){
-      const fields = (importCtx.dataset==='movies'? MOVIE_FIELDS : SERIES_FIELDS);
+      if (importCtx.dataset === 'workbook'){ return; }
+      const fields =
+        importCtx.dataset==='movies'  ? MOVIE_FIELDS  :
+        importCtx.dataset==='series'  ? SERIES_FIELDS :
+        EPISODE_FIELDS;
+
       const preview = importCtx.rows.slice(0,3).map((r,i)=>{
         const mapped = Object.fromEntries(fields.map(f=> [f, importCtx.mapping[f]? r[importCtx.mapping[f]] : '' ]));
         return `<pre>#${i+1} ${JSON.stringify(mapped, null, 2)}</pre>`;
@@ -243,14 +253,241 @@
       document.getElementById('mapPreview').innerHTML = `<div>Preview (first 3 rows):</div>${preview}`;
     }
 
+    // ---------- File reading ----------
+    function readWorkbookAllSheets(file){
+      return new Promise((resolve,reject)=>{
+        const reader = new FileReader();
+        reader.onload = (ev)=>{
+          try{
+            const data = new Uint8Array(ev.target.result);
+            const wb = XLSX.read(data, { type:'array' });
+            const get = (name)=> XLSX.utils.sheet_to_json(wb.Sheets[name] || {}, { defval:'' });
+            resolve({ series:get('series'), seasons:get('seasons'), episodes:get('episodes') });
+          }catch(err){ reject(err); }
+        };
+        reader.onerror = reject;
+        reader.readAsArrayBuffer(file);
+      });
+    }
+
+    function readSingleSheet(file){
+      return new Promise((resolve,reject)=>{
+        const reader = new FileReader();
+        reader.onload = (ev)=>{
+          try{
+            const data = new Uint8Array(ev.target.result);
+            const wb = XLSX.read(data, { type:'array' });
+            const ws = wb.Sheets[wb.SheetNames[0]];
+            const rows = XLSX.utils.sheet_to_json(ws, { defval:'' });
+            resolve(rows);
+          }catch(err){ reject(err); }
+        };
+        reader.onerror = reject;
+        reader.readAsArrayBuffer(file);
+      });
+    }
+
+    document.getElementById('csvFile').addEventListener('change', async (e)=>{
+      const f = e.target.files[0]; if(!f) return;
+      try{
+        const name = (f.name||'').toLowerCase();
+        if (name.endsWith('.xlsx') || name.endsWith('.xls')){
+          // Prüfe, ob es ein Workbook mit den drei erwarteten Sheets ist
+          const wb = await readWorkbookAllSheets(f);
+          const hasAny = (wb.series?.length||0) + (wb.seasons?.length||0) + (wb.episodes?.length||0) > 0;
+          if (hasAny){
+            importCtx.dataset = 'workbook';
+            importCtx.workbook = wb;
+            importCtx.headers = []; importCtx.rows = [];
+            buildMapUI();
+          } else {
+            // Fallback: Erste Tabelle als Mapping-Import
+            const rows = await readSingleSheet(f);
+            importCtx.headers = rows.length? Object.keys(rows[0]) : [];
+            importCtx.rows = rows;
+            importCtx.dataset = document.getElementById('mapDataset').value;
+            buildMapUI();
+          }
+        } else {
+          // CSV
+          await new Promise((resolve)=>{
+            Papa.parse(f, { header:true, skipEmptyLines:true, complete: (res)=>{
+              importCtx.headers = res.meta.fields||[];
+              importCtx.rows = res.data||[];
+              resolve();
+            }});
+          });
+          importCtx.dataset = document.getElementById('mapDataset').value;
+          buildMapUI();
+        }
+      }catch(err){
+        console.error(err);
+        showToast('Failed to read file');
+      }finally{
+        e.target.value='';
+      }
+    });
+
+    document.getElementById('mapDataset').addEventListener('change', ()=>{
+      if(importCtx.dataset !== 'workbook'){ importCtx.dataset = document.getElementById('mapDataset').value; buildMapUI(); }
+    });
+
+    // ---------- Import logic ----------
     async function runImport(){
       if(!(auth.currentUser)){ showToast('Please sign in first'); return; }
       if(!isAuthorized){ showToast('Not authorized'); return; }
-      const fields = (importCtx.dataset==='movies'? MOVIE_FIELDS : SERIES_FIELDS);
+
+      // A) Workbook-Flow: series + seasons + episodes in einem XLSX
+      if (importCtx.dataset === 'workbook'){
+        let sAdded=0,sUpdated=0,seaAdded=0,epAdded=0,epUpdated=0,missing=0;
+
+        // 1) SERIES upsert
+        for (const obj of (importCtx.workbook.series||[])){
+          if(!obj.slug || !obj.title_en) continue;
+          obj.type = 'series';
+          obj.genres = String(obj.genres||'').split('|').filter(Boolean);
+          obj.tags   = String(obj.tags||'').split('|').filter(Boolean);
+          obj.favorite = String(obj.favorite).toLowerCase()==='true';
+          obj.on_watchlist = String(obj.on_watchlist).toLowerCase()==='true';
+          obj.rating = Number(obj.rating||0)||0;
+          obj.year = Number(obj.year||0)||0;
+          const ref = doc(db,'series', obj.slug);
+          const ex  = await getDoc(ref);
+          await setDoc(ref, { ...obj, updated_at:new Date().toISOString() }, { merge:true });
+          ex.exists() ? sUpdated++ : sAdded++;
+        }
+
+        // 2) SEASONS optional (legt Stubs an / aktualisiert Titel/Note)
+        for (const r of (importCtx.workbook.seasons||[])){
+          const slug = String(r.series_slug||'').trim(); if(!slug) continue;
+          const sNum = Number(r.season_number||0); if(!sNum) continue;
+          const sRef = doc(db,'series', slug); const sSnap = await getDoc(sRef);
+          if(!sSnap.exists()){ missing++; continue; }
+          const serie   = sSnap.data()||{};
+          const seasons = Array.isArray(serie.seasons)? [...serie.seasons] : [];
+          let idx = seasons.findIndex(s=> Number(s.season_number)===sNum);
+          if(idx === -1){ seasons.push({ season_number:sNum, episodes:[], title:r.season_title||'', note:r.note||'' }); seaAdded++; }
+          else { seasons[idx] = { ...seasons[idx], title:r.season_title||seasons[idx].title, note:r.note||seasons[idx].note }; }
+          await setDoc(sRef, { seasons, updated_at:new Date().toISOString() }, { merge:true });
+        }
+
+        // 3) EPISODES upsert (legt fehlende Staffeln automatisch an)
+        const pad2 = n => String(Math.max(0, Number(n)||0)).padStart(2,'0');
+        const bySeries = {};
+        for (const r of (importCtx.workbook.episodes||[])){
+          const slug = String(r.series_slug||'').trim(); if(!slug) continue;
+          (bySeries[slug] ||= []).push(r);
+        }
+        for (const slug of Object.keys(bySeries)){
+          const sRef = doc(db,'series', slug); const snap = await getDoc(sRef);
+          if(!snap.exists()){ missing++; continue; }
+          const serie = snap.data()||{};
+          const seasons = Array.isArray(serie.seasons)? [...serie.seasons] : [];
+
+          const ensureSeason = (num)=>{
+            let i = seasons.findIndex(s=> Number(s.season_number)===Number(num));
+            if(i===-1){ seasons.push({ season_number:Number(num), episodes:[] }); i=seasons.length-1; }
+            if(!Array.isArray(seasons[i].episodes)) seasons[i].episodes=[];
+            return i;
+          };
+
+          for (const r of bySeries[slug]){
+            const sNum = Number(r.season_number||1);
+            const eNum = Number(r.episode_number||0);
+            const idx  = ensureSeason(sNum);
+            const code = String(r.code||`S${pad2(sNum)}E${pad2(eNum)}`);
+            const ep = {
+              code,
+              episode_number: eNum || undefined,
+              title: r.title || '',
+              air_date: r.air_date || '',
+              watched: String(r.watched).toLowerCase()==='true',
+              rating: Number(r.rating||0)||0,
+              notes: r.notes || '',
+              runtime_min: Number(r.runtime_min||0) || undefined
+            };
+            const list = seasons[idx].episodes;
+            const byCode = list.findIndex(x => (x.code||'') === code);
+            const byNum  = list.findIndex(x => Number(x.episode_number||0) === eNum && eNum>0);
+            if (byCode>=0 || byNum>=0){ list[byCode>=0?byCode:byNum] = { ...list[byCode>=0?byCode:byNum], ...ep }; epUpdated++; }
+            else { list.push(ep); epAdded++; }
+            list.sort((a,b)=>{
+              const an=Number(a.episode_number||0), bn=Number(b.episode_number||0);
+              return an && bn ? an-bn : String(a.code||'').localeCompare(String(b.code||''));
+            });
+          }
+          await setDoc(sRef, { seasons, updated_at:new Date().toISOString() }, { merge:true });
+        }
+
+        showToast(`Workbook: series +${sAdded}/${sUpdated} • seasons +${seaAdded} • episodes +${epAdded}/${epUpdated}${missing?` • missing series ${missing}`:''}`);
+        fillContentTable?.();
+        return;
+      }
+
+      // B) CSV/XLSX Einzelsheet – Mapping für movies / series / episodes
+      const fields = (importCtx.dataset==='movies'? MOVIE_FIELDS : importCtx.dataset==='series' ? SERIES_FIELDS : EPISODE_FIELDS);
       const dupSlug = document.getElementById('chkDupSlug').checked;
       const dupTY = document.getElementById('chkDupTitleYear').checked;
-      let added=0, skipped=0, duplicates=0;
+      let added=0, skipped=0, duplicates=0, updated=0;
 
+      if (importCtx.dataset === 'episodes'){
+        // Episodes upsert gegen bestehende series.<slug>.seasons[].episodes
+        const bySeries = {};
+        for (const r of importCtx.rows){
+          const row = Object.fromEntries(fields.map(f=> [f, importCtx.mapping[f] ? r[importCtx.mapping[f]] : '' ]));
+          const slug = String(row.series_slug||'').trim(); if(!slug) { skipped++; continue; }
+          (bySeries[slug] ||= []).push(row);
+        }
+        const pad2 = n => String(Math.max(0, Number(n)||0)).padStart(2,'0');
+
+        for (const slug of Object.keys(bySeries)){
+          const sRef = doc(db, 'series', slug);
+          const sSnap = await getDoc(sRef);
+          if(!sSnap.exists()){ skipped++; continue; }
+          const serie = sSnap.data() || {};
+          const seasons = Array.isArray(serie.seasons) ? [...serie.seasons] : [];
+
+          const ensureSeason = (num)=>{
+            let i = seasons.findIndex(s=> Number(s.season_number)===Number(num));
+            if (i === -1){ seasons.push({ season_number:Number(num), episodes:[] }); i = seasons.length - 1; }
+            if(!Array.isArray(seasons[i].episodes)) seasons[i].episodes = [];
+            return i;
+          };
+
+          for (const r of bySeries[slug]){
+            const sNum = Number(r.season_number||1);
+            const eNum = Number(r.episode_number||0);
+            const idx  = ensureSeason(sNum);
+            const code = String(r.code||`S${pad2(sNum)}E${pad2(eNum)}`);
+            const ep = {
+              code,
+              episode_number: eNum || undefined,
+              title: r.title || '',
+              air_date: r.air_date || '',
+              watched: String(r.watched).toLowerCase()==='true',
+              rating: Number(r.rating||0)||0,
+              notes: r.notes || '',
+              runtime_min: Number(r.runtime_min||0) || undefined
+            };
+            const list = seasons[idx].episodes;
+            const byCode = list.findIndex(x => (x.code||'') === code);
+            const byNum  = list.findIndex(x => Number(x.episode_number||0) === eNum && eNum>0);
+            if (byCode>=0 || byNum>=0){ list[byCode>=0?byCode:byNum] = { ...list[byCode>=0?byCode:byNum], ...ep }; updated++; }
+            else { list.push(ep); added++; }
+            list.sort((a,b)=>{
+              const an=Number(a.episode_number||0), bn=Number(b.episode_number||0);
+              return an && bn ? an-bn : String(a.code||'').localeCompare(String(b.code||''));
+            });
+          }
+
+          await setDoc(sRef, { seasons, updated_at:new Date().toISOString() }, { merge:true });
+        }
+        showToast(`Episodes: +${added} updated ${updated}${skipped?` • skipped ${skipped}`:''}`);
+        fillContentTable?.();
+        return;
+      }
+
+      // movies / series
       for (const r of importCtx.rows){
         const obj = Object.fromEntries(fields.map(f=> [f, importCtx.mapping[f]? r[importCtx.mapping[f]] : '' ]));
         const type = importCtx.dataset.slice(0,-1); // movie / series
@@ -266,7 +503,7 @@
         obj.updated_at = obj.updated_at || new Date().toISOString();
         if(!obj.slug && obj.title_en && obj.year){ obj.slug = slugify(obj.title_en, obj.year); }
 
-        // requireds
+        // Requireds
         if(!(obj.title_en && obj.year && obj.poster)){ skipped++; continue; }
         if(type==='movie' && !(obj.genres.length>0 || Number(obj.runtime_min||0)>0)){ skipped++; continue; }
         if(type==='series' && !(obj.genres.length>0 || (obj.platform||''))){ skipped++; continue; }
@@ -285,35 +522,6 @@
       fillContentTable();
     }
 
-    // Handle file input (CSV or XLS/XLSX)
-    document.getElementById('csvFile').addEventListener('change', async (e)=>{
-      const f = e.target.files[0]; if(!f) return;
-      try{
-        const name = (f.name||'').toLowerCase();
-        if(name.endsWith('.xlsx') || name.endsWith('.xls')){
-          const rows = await parseXLSXRows(f);
-          importCtx.headers = rows.length? Object.keys(rows[0]) : [];
-          importCtx.rows = rows;
-        } else {
-          await new Promise((resolve)=>{
-            Papa.parse(f, { header:true, skipEmptyLines:true, complete: (res)=>{ 
-              importCtx.headers = res.meta.fields||[];
-              importCtx.rows = res.data||[];
-              resolve();
-            }});
-          });
-        }
-        importCtx.dataset = document.getElementById('mapDataset').value;
-        buildMapUI();
-      } catch(err){
-        console.error(err);
-        showToast('Failed to read file');
-      } finally {
-        e.target.value='';
-      }
-    });
-
-    document.getElementById('mapDataset').addEventListener('change', ()=> buildMapUI());
     document.getElementById('mapImport').addEventListener('click', runImport);
 
     // ---------- Content list ----------
@@ -321,13 +529,23 @@
       const tbody = document.querySelector('#contentTable tbody');
       tbody.innerHTML='';
       for (const name of ['movies','series']){
-        const snap = await getDocs(query(collection(db, name), orderBy('updated_at','desc')));
-        snap.forEach(docSnap=>{
-          const x = { type: name.slice(0,-1), id: docSnap.id, ...docSnap.data() };
-          const tr = document.createElement('tr');
-          tr.innerHTML = `<td>${x.type}</td><td>${x.title_en||''}</td><td>${x.year||''}</td><td>${x.status||''}</td><td>${x.platform||''}</td><td>${x.rating||0}</td><td>${(x.updated_at||'').slice(0,10)}</td><td><button class='icon-btn' data-del='${name}|${x.id}'>Delete</button></td>`;
-          tbody.appendChild(tr);
-        });
+        try{
+          const snap = await getDocs(query(collection(db, name), orderBy('updated_at','desc')));
+          snap.forEach(docSnap=>{
+            const x = { type: name.slice(0,-1), id: docSnap.id, ...docSnap.data() };
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td>${x.type}</td><td>${x.title_en||''}</td><td>${x.year||''}</td><td>${x.status||''}</td><td>${x.platform||''}</td><td>${x.rating||0}</td><td>${(x.updated_at||'').slice(0,10)}</td><td><button class='icon-btn' data-del='${name}|${x.id}'>Delete</button></td>`;
+            tbody.appendChild(tr);
+          });
+        }catch(err){
+          const snap = await getDocs(collection(db, name)); // Fallback ohne orderBy
+          snap.forEach(docSnap=>{
+            const x = { type: name.slice(0,-1), id: docSnap.id, ...docSnap.data() };
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td>${x.type}</td><td>${x.title_en||''}</td><td>${x.year||''}</td><td>${x.status||''}</td><td>${x.platform||''}</td><td>${x.rating||0}</td><td>${(x.updated_at||'').slice(0,10)}</td><td><button class='icon-btn' data-del='${name}|${x.id}'>Delete</button></td>`;
+            tbody.appendChild(tr);
+          });
+        }
       }
       tbody.querySelectorAll('[data-del]').forEach(btn=> btn.addEventListener('click', async()=>{
         if(!(auth.currentUser) || !isAuthorized){ showToast('Not authorized'); return; }
@@ -339,7 +557,7 @@
       }));
     }
 
-    // No eager calls; the admin content becomes active after authorization.
+    // No eager calls; admin content activates after authorization.
   </script>
 </body>
 </html>

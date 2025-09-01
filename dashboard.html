@@ -5,7 +5,52 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Watch Tracker • Dashboard</title>
   <link rel="stylesheet" href="styles.css" />
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    /* Page-specific layout helpers for dashboard */
+    .dash-grid{
+      display:grid; gap:16px;
+      grid-template-columns: repeat(12, 1fr);
+    }
+    .dash-col-3{ grid-column: span 3; }
+    .dash-col-4{ grid-column: span 4; }
+    .dash-col-5{ grid-column: span 5; }
+    .dash-col-6{ grid-column: span 6; }
+    .dash-col-7{ grid-column: span 7; }
+    .dash-col-8{ grid-column: span 8; }
+    .dash-col-12{ grid-column: span 12; }
+    @media (max-width: 1000px){
+      .dash-col-3,.dash-col-4,.dash-col-5,.dash-col-6,.dash-col-7,.dash-col-8,.dash-col-12{ grid-column: 1 / -1; }
+    }
+
+    .card-pad{ padding:16px 18px; }
+    .big-num{ font-size:2rem; font-weight:800; letter-spacing:.5px }
+    .muted-sm{ color:var(--muted); font-size:.9rem }
+    .kpi-grid{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px }
+    .kpi{ background:var(--chip); border:1px solid var(--border); border-radius:12px; padding:12px }
+
+    /* Simple horizontal bars */
+    .stat-row{ display:flex; align-items:center; gap:10px; padding:6px 0 }
+    .stat-row .label{ flex:0 0 180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .stat-row .bar{ flex:1; height:8px; background:#161616; border:1px solid var(--border); border-radius:999px; overflow:hidden }
+    .stat-row .bar > span{ display:block; height:100%; background:var(--accent); width:0 }
+    .stat-row .val{ flex:0 0 auto; min-width:60px; text-align:right; }
+
+    /* For compact label columns */
+    .stat-row.small .label{ flex-basis:140px }
+
+    /* Tiny columns for trends */
+    .mini-bars{ display:flex; align-items:flex-end; gap:4px; height:80px; }
+    .mini-bars .col{ width:10px; background:var(--chip); border:1px solid var(--border); border-radius:4px; }
+    .mini-legend{ display:flex; justify-content:space-between; margin-top:6px; color:var(--muted); font-size:.85rem }
+
+    /* Stars text line */
+    .stars{ font-size:1.1rem; letter-spacing:1px; }
+
+    /* Next-up list */
+    .list{ margin-top:8px }
+    .list .item{ display:flex; gap:8px; padding:6px 0; border-bottom:1px solid var(--border) }
+    .pill{ display:inline-flex; gap:6px; align-items:center; background:var(--chip); border:1px solid var(--border); padding:4px 8px; border-radius:999px }
+  </style>
 </head>
 <body>
   <header>
@@ -18,92 +63,638 @@
   </header>
 
   <main class="container">
-    <div class="grid">
-      <section class="card" style="padding:14px">
+    <div class="dash-grid">
+      <!-- Totals -->
+      <section class="card card-pad dash-col-6">
         <h2>Totals</h2>
         <div id="totals" class="muted">Loading…</div>
       </section>
-      <section class="card" style="padding:14px">
+
+      <!-- Average rating -->
+      <section class="card card-pad dash-col-6">
         <h2>Average Rating</h2>
-        <canvas id="avgChart"></canvas>
+        <div id="avg" class="muted">Loading…</div>
+      </section>
+
+      <!-- Fortschritt & Backlog -->
+      <section class="card card-pad dash-col-8">
+        <h2>Progress & Backlog</h2>
+        <div id="progress"></div>
+      </section>
+      <section class="card card-pad dash-col-4">
+        <h2>Backlog Details</h2>
+        <div id="backlog"></div>
+      </section>
+
+      <!-- Bewertungen & Präferenzen -->
+      <section class="card card-pad dash-col-6">
+        <h2>Rating Distribution</h2>
+        <div id="ratingHist"></div>
+      </section>
+      <section class="card card-pad dash-col-6">
+        <h2>Avg Rating by Genre</h2>
+        <div id="avgGenre"></div>
+      </section>
+
+      <!-- Top Genres (by count) -->
+      <section class="card card-pad dash-col-8">
+        <h2>Top Genres (by Count)</h2>
+        <div id="genres"></div>
+      </section>
+      <!-- Platforms (Series) by Count -->
+      <section class="card card-pad dash-col-4">
+        <h2>Platforms (Series)</h2>
+        <div id="platforms"></div>
+      </section>
+
+      <!-- Trends über Zeit -->
+      <section class="card card-pad dash-col-6">
+        <h2>Adds per Month (last 12)</h2>
+        <div id="adds12"></div>
+      </section>
+      <section class="card card-pad dash-col-6">
+        <h2>Avg Rating by Year</h2>
+        <div id="avgYear"></div>
+      </section>
+
+      <!-- Year distribution (existing) -->
+      <section class="card card-pad dash-col-6">
+        <h2>Year Trend (by Count)</h2>
+        <div id="yearTrend"></div>
+      </section>
+
+      <!-- Runtime histogram -->
+      <section class="card card-pad dash-col-6">
+        <h2>Runtime (Movies)</h2>
+        <div id="runtime"></div>
+      </section>
+
+      <!-- Engagement & Abschluss -->
+      <section class="card card-pad dash-col-6">
+        <h2>Completion Rates</h2>
+        <div id="completion"></div>
+      </section>
+      <section class="card card-pad dash-col-6">
+        <h2>Movie Progress Buckets</h2>
+        <div id="movieBuckets"></div>
+      </section>
+
+      <!-- Zeitaufwand & Nutzen -->
+      <section class="card card-pad dash-col-12">
+        <h2>Watchtime • Seen & Remaining</h2>
+        <div id="watchtime"></div>
       </section>
     </div>
-
-    <section class="row">
-      <h2>Top Genres</h2>
-      <canvas id="genreChart"></canvas>
-    </section>
-
-    <section class="row">
-      <h2>Status Distribution</h2>
-      <canvas id="statusChart"></canvas>
-    </section>
   </main>
+
+  <div class="toast" id="toast"></div>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+    import { getFirestore, collection, getDocs, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
+    // ---------- Config ----------
     async function loadConfig(){
-      for (const p of ["firebase.config.json","firebase.config.example.json"]) { try { const r = await fetch(p); if(r.ok) return r.json(); } catch(e) {} }
+      for (const p of ["firebase.config.json","firebase.config.example.json"]) {
+        try { const r = await fetch(p); if(r.ok) return r.json(); } catch(e) {}
+      }
       throw new Error("Missing firebase.config.json");
     }
     const cfg = await loadConfig();
     const app = initializeApp(cfg);
     const db  = getFirestore(app);
 
+    // ---------- Helpers ----------
+    const num   = (n)=> new Intl.NumberFormat().format(n||0);
+    const clamp = (v,min,max)=> Math.max(min, Math.min(max, v));
+    const pct   = (a,b)=> b>0 ? Math.round((a/b)*100) : 0;
+    const starsLine = (v)=> {
+      const r = Math.round(v||0);
+      return '★★★★★'.slice(0,r)+'☆☆☆☆☆'.slice(r);
+    };
+    const pad2 = (v)=> String(v).padStart(2,'0');
+    const toDate = (v)=>{
+      if(!v && v!==0) return null;
+      if (typeof v === 'object' && typeof v.seconds === 'number') return new Date(v.seconds*1000);
+      const d = new Date(v);
+      return isNaN(d) ? null : d;
+    };
+    const monthKey = (d)=> `${d.getFullYear()}-${pad2(d.getMonth()+1)}`;
+    const hhmm = (minutes)=>{
+      const m = Math.max(0, Math.round(minutes||0));
+      const h = Math.floor(m/60), mm = m%60;
+      return `${h} h ${pad2(mm)} min`;
+    };
+
+    // ---------- Fetch ----------
+    const state = { movies:[], series:[] };
+
     async function fetchAll(){
       const out = { movies:[], series:[] };
       for (const name of ["movies","series"]) {
-        const snap = await getDocs(collection(db,name));
-        snap.forEach(doc=> out[name].push({ id:doc.id, ...doc.data() }));
+        try{
+          const snap = await getDocs(query(collection(db, name), orderBy("updated_at","desc")));
+          snap.forEach(d=> out[name].push({ id:d.id, ...d.data() }));
+        }catch{
+          const snap = await getDocs(collection(db, name));
+          snap.forEach(d=> out[name].push({ id:d.id, ...d.data() }));
+        }
       }
       return out;
     }
 
-    function avg(nums){ return nums.length? (nums.reduce((a,b)=>a+b,0)/nums.length) : 0; }
-    function countBy(arr, fn){ const m=new Map(); arr.forEach(x=>{ const k=fn(x); m.set(k,(m.get(k)||0)+1); }); return m; }
+    // ---------- Aggregations ----------
+    function computeStats(movies, series){
+      // Movies
+      const mCount = movies.length;
+      const mFav   = movies.filter(x=> x.favorite).length;
+      const mWL    = movies.filter(x=> x.on_watchlist).length;
+      const mRated = movies.filter(x=> (x.rating||0)>0);
+      const mAvg   = mRated.length ? mRated.reduce((s,x)=> s+(x.rating||0),0)/mRated.length : 0;
+      const mCompleted = movies.filter(x=>{
+        const s = (x.status||'').toLowerCase();
+        return ['completed','finished','watched','done'].includes(s);
+      }).length;
+      const mPlan = movies.filter(x=> (x.status||'').toLowerCase().includes('plan')).length;
 
-    function renderTotals(data){
-      const totals = document.getElementById('totals');
-      const mv = data.movies.length, sv = data.series.length;
-      const mDone = data.movies.filter(x=>x.status==='Completed').length;
-      const sDone = data.series.filter(x=>x.seasons && x.seasons.every(s=> (s.episodes||[]).every(e=>e.watched))).length;
-      totals.innerHTML = `<div>Movies: <strong>${mv}</strong> (Completed: ${mDone})</div><div>Series: <strong>${sv}</strong> (Finished: ${sDone})</div>`;
+      // Series
+      const sCount = series.length;
+      const sFav   = series.filter(x=> x.favorite).length;
+      const sWL    = series.filter(x=> x.on_watchlist).length;
+      const sRated = series.filter(x=> (x.rating||0)>0);
+      const sAvg   = sRated.length ? sRated.reduce((s,x)=> s+(x.rating||0),0)/sRated.length : 0;
+      const sCompleted = series.filter(x=>{
+        const s = (x.status||'').toLowerCase();
+        return ['completed','finished','watched','done'].includes(s);
+      }).length;
+      const sPlan = series.filter(x=> (x.status||'').toLowerCase().includes('plan')).length;
+
+      // Seasons & Episodes / Progress
+      let totalEps=0, watchedEps=0;
+      series.forEach(sr=>{
+        (sr.seasons||[]).forEach(se=>{
+          const eps = se.episodes||[];
+          totalEps  += eps.length;
+          watchedEps+= eps.filter(e=> e.watched).length;
+        });
+      });
+      const seriesProgress = { watched: watchedEps, total: totalEps, percent: pct(watchedEps,totalEps) };
+
+      // Next-up list (first unseen episode per series)
+      const nextUp = [];
+      series.forEach(sr=>{
+        let found = null;
+        (sr.seasons||[]).forEach(se=>{
+          if(found) return;
+          const first = (se.episodes||[]).find(e=> !e.watched);
+          if(first){
+            found = {
+              title: sr.title_en || sr.id,
+              code: first.code || `S${pad2(se.season_number||1)}E${pad2(first.episode_number||1)}`,
+              when: first.air_date || ''
+            };
+          }
+        });
+        if(found) nextUp.push(found);
+      });
+
+      // Genres (count)
+      const genreCount = {};
+      [...movies, ...series].forEach(x=>{
+        (x.genres||[]).forEach(g=>{
+          const key = String(g).trim();
+          if(!key) return;
+          genreCount[key] = (genreCount[key]||0) + 1;
+        });
+      });
+
+      // Avg rating by genre
+      const gSum={}, gN={};
+      [...movies, ...series].forEach(x=>{
+        const r = Number(x.rating)||0;
+        if(r<=0) return;
+        (x.genres||[]).forEach(g=>{
+          const k = String(g).trim(); if(!k) return;
+          gSum[k]=(gSum[k]||0)+r; gN[k]=(gN[k]||0)+1;
+        });
+      });
+      const genreAvg = Object.fromEntries(Object.keys(gSum).map(k=> [k, gSum[k]/gN[k]]));
+
+      // Platforms (series, count)
+      const platformCount = {};
+      series.forEach(x=>{
+        const p = String(x.platform||'').trim();
+        if(!p) return;
+        platformCount[p] = (platformCount[p]||0) + 1;
+      });
+
+      // Year distribution (count)
+      const yearCount = {};
+      [...movies, ...series].forEach(x=>{
+        const y = Number(x.year)||0;
+        if(!y) return;
+        yearCount[y] = (yearCount[y]||0) + 1;
+      });
+
+      // Avg rating by year
+      const ySum={}, yN={};
+      [...movies, ...series].forEach(x=>{
+        const y = Number(x.year)||0, r = Number(x.rating)||0;
+        if(!y || r<=0) return;
+        ySum[y]=(ySum[y]||0)+r; yN[y]=(yN[y]||0)+1;
+      });
+      const yearAvg = Object.fromEntries(Object.keys(ySum).map(k=> [Number(k), ySum[k]/yN[k]]));
+
+      // Adds per month (last 12)
+      const last12keys = [];
+      const now = new Date();
+      for(let i=11;i>=0;i--){
+        const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+        last12keys.push(monthKey(d));
+      }
+      const adds12 = Object.fromEntries(last12keys.map(k=> [k,0]));
+      [...movies, ...series].forEach(x=>{
+        const d = toDate(x.created_at) || toDate(x.updated_at);
+        if(!d) return;
+        const k = monthKey(new Date(d.getFullYear(), d.getMonth(), 1));
+        if(k in adds12) adds12[k] += 1;
+      });
+
+      // Runtime histogram (movies)
+      const buckets = { '≤90':0, '91–120':0, '121–150':0, '150+':0 };
+      movies.forEach(x=>{
+        const m = Number(x.runtime_min)||0;
+        if(!m) return;
+        if (m<=90) buckets['≤90']++;
+        else if (m<=120) buckets['91–120']++;
+        else if (m<=150) buckets['121–150']++;
+        else buckets['150+']++;
+      });
+
+      // Movie progress buckets + completion rate
+      const movieProgBuckets = { '<25%':0, '25–74%':0, '75–99%':0, 'Completed':0 };
+      const movieStarted = movies.filter(x=> (x.status||'').toLowerCase()!=='plan to watch').length || 0;
+      const movieCompletionRate = pct(mCompleted, movieStarted||mCount);
+
+      function movieProgressPercent(m){
+        const status = (m.status||'').toLowerCase();
+        if(['completed','finished','watched','done'].includes(status)) return 100;
+        const dur = (Number(m.runtime_min)||0)*60;
+        const pos = Number(m.last_position_seconds)||0;
+        if(dur<=0) return 0;
+        return clamp(Math.round((pos/dur)*100), 0, 100);
+      }
+      movies.forEach(m=>{
+        const p = movieProgressPercent(m);
+        if(p>=100) movieProgBuckets['Completed']++;
+        else if(p>=75) movieProgBuckets['75–99%']++;
+        else if(p>=25) movieProgBuckets['25–74%']++;
+        else movieProgBuckets['<25%']++;
+      });
+
+      // Series completion rate (status-basiert)
+      const seriesStarted = series.filter(x=> (x.status||'').toLowerCase()!=='plan to watch').length || 0;
+      const seriesCompletionRate = pct(sCompleted, seriesStarted||sCount);
+
+      // Watchtime (min)
+      let seenMin=0, remainingMin=0;
+      movies.forEach(m=>{
+        const dur = Number(m.runtime_min)||0; if(dur<=0) return;
+        const status = (m.status||'').toLowerCase();
+        const posMin = (Number(m.last_position_seconds)||0)/60;
+        const seen = (['completed','finished','watched','done'].includes(status) || (posMin/dur)>=0.95) ? dur : Math.min(dur, posMin);
+        seenMin += seen;
+        remainingMin += Math.max(0, dur - seen);
+      });
+      series.forEach(s=>{
+        const len = Number(s.episode_length_min)||0; if(len<=0) return;
+        let t=0,w=0;
+        (s.seasons||[]).forEach(se=>{
+          const eps = se.episodes||[];
+          t += eps.length; w += eps.filter(e=> e.watched).length;
+        });
+        seenMin += w*len;
+        remainingMin += Math.max(0, (t-w)*len);
+      });
+
+      // Rating histogram (0..5)
+      const hist = { 0:0, 1:0, 2:0, 3:0, 4:0, 5:0 };
+      [...movies,...series].forEach(x=>{
+        const r = Number(x.rating)||0;
+        if(r<0) return;
+        const b = Math.round(r);
+        if(b in hist) hist[b] += 1;
+      });
+
+      return {
+        totals: {
+          movies: mCount, series: sCount,
+          seasons: series.reduce((acc,x)=> acc + ((x.seasons||[]).length), 0),
+          episodes: series.reduce((acc,x)=> acc + ((x.seasons||[]).reduce((a,s)=> a + ((s.episodes||[]).length), 0)), 0),
+          favorites: mFav + sFav,
+          watchlist: mWL + sWL,
+          completed: mCompleted + sCompleted
+        },
+        avg: {
+          overall: (()=> {
+            const all = [...mRated, ...sRated];
+            return all.length ? all.reduce((s,x)=> s+(x.rating||0),0)/all.length : 0;
+          })(),
+          movies: mAvg, series: sAvg
+        },
+        genres: genreCount,
+        platforms: platformCount,
+        years: yearCount,
+        runtimeBuckets: buckets,
+        // New blocks
+        seriesProgress,
+        planToWatch: { movies: mPlan, series: sPlan },
+        nextUp,
+        ratingHist: hist,
+        avgByGenre: genreAvg,
+        adds12,
+        avgByYear: yearAvg,
+        completion: {
+          movies: { completed: mCompleted, started: movieStarted, rate: movieCompletionRate },
+          series: { completed: sCompleted, started: seriesStarted, rate: seriesCompletionRate }
+        },
+        movieProgBuckets,
+        watchtime: { seenMin, remainingMin, totalMin: seenMin+remainingMin }
+      };
     }
 
-    function renderAvg(data){
-      const aMovie = avg(data.movies.map(x=>Number(x.rating||0)).filter(Boolean));
-      const aSeries = avg(data.series.map(x=>Number(x.rating||0)).filter(Boolean));
-      new Chart(document.getElementById('avgChart'), { type:'bar', data:{ labels:['Movies','Series'], datasets:[{ label:'Avg ★', data:[aMovie,aSeries] }] }, options:{ plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true,max:5}} });
+    // ---------- Render ----------
+    function renderTotals(el, t){
+      el.innerHTML = `
+        <div class="kpi-grid">
+          <div class="kpi"><div class="big-num">${num(t.movies)}</div><div class="muted-sm">Movies</div></div>
+          <div class="kpi"><div class="big-num">${num(t.series)}</div><div class="muted-sm">Series</div></div>
+          <div class="kpi"><div class="big-num">${num(t.seasons)}</div><div class="muted-sm">Seasons</div></div>
+          <div class="kpi"><div class="big-num">${num(t.episodes)}</div><div class="muted-sm">Episodes</div></div>
+          <div class="kpi"><div class="big-num">${num(t.favorites)}</div><div class="muted-sm">Favorites</div></div>
+          <div class="kpi"><div class="big-num">${num(t.watchlist)}</div><div class="muted-sm">On Watchlist</div></div>
+        </div>
+        <div style="margin-top:10px" class="muted-sm">Completed (by status): <strong>${num(t.completed)}</strong></div>
+      `;
     }
 
-    function renderGenres(data){
-      const genres = [...data.movies, ...data.series].flatMap(x=>x.genres||[]);
-      const m = countBy(genres, g=>g);
-      const pairs = [...m.entries()].sort((a,b)=>b[1]-a[1]).slice(0,10);
-      new Chart(document.getElementById('genreChart'), { type:'bar', data:{ labels:pairs.map(p=>p[0]), datasets:[{ label:'Count', data:pairs.map(p=>p[1]) }] }, options:{ plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true}} } });
+    function renderAvg(el, a){
+      const fmt = (v)=> `${(Math.round((v||0)*10)/10).toFixed(1)}`;
+      el.innerHTML = `
+        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;align-items:center">
+          <div>
+            <div class="big-num">${fmt(a.overall)}</div>
+            <div class="stars" aria-hidden="true">${starsLine(a.overall)}</div>
+            <div class="muted-sm">Overall</div>
+          </div>
+          <div>
+            <div class="big-num">${fmt(a.movies)}</div>
+            <div class="stars" aria-hidden="true">${starsLine(a.movies)}</div>
+            <div class="muted-sm">Movies</div>
+          </div>
+          <div>
+            <div class="big-num">${fmt(a.series)}</div>
+            <div class="stars" aria-hidden="true">${starsLine(a.series)}</div>
+            <div class="muted-sm">Series</div>
+          </div>
+        </div>
+      `;
     }
 
-    function renderStatus(data){
-      const statuses = [...data.movies].map(x=>x.status||'Unknown');
-      const m = countBy(statuses, s=>s);
-      const pairs = [...m.entries()].sort((a,b)=>b[1]-a[1]);
-      new Chart(document.getElementById('statusChart'), { type:'doughnut', data:{ labels:pairs.map(p=>p[0]), datasets:[{ data:pairs.map(p=>p[1]) }] }, options:{} });
+    function renderBarList(el, map, {limit=12}={}){
+      const entries = Object.entries(map).sort((a,b)=> b[1]-a[1]).slice(0,limit);
+      if(!entries.length){ el.innerHTML = '<div class="muted">No data</div>'; return; }
+      const max = entries[0][1] || 1;
+      el.innerHTML = entries.map(([label,val])=>`
+        <div class="stat-row">
+          <div class="label">${label}</div>
+          <div class="bar"><span style="width:${clamp((val/max)*100, 4, 100)}%"></span></div>
+          <div class="val">${num(val)}</div>
+        </div>
+      `).join('');
     }
 
-    try {
-      const data = await fetchAll();
-      renderTotals(data);
-      renderAvg(data);
-      renderGenres(data);
-      renderStatus(data);
-    } catch(err){
-      console.warn('Firestore failed, falling back to sample-data.json', err);
-      const res = await fetch('sample-data.json'); const json = await res.json();
-      const data = { movies: json.movies, series: json.series };
-      renderTotals(data); renderAvg(data); renderGenres(data); renderStatus(data);
+    function renderBarListNumeric(el, map, {limit=12, digits=1, labelWidth=180}={}){
+      const entries = Object.entries(map).sort((a,b)=> b[1]-a[1]).slice(0,limit);
+      if(!entries.length){ el.innerHTML = '<div class="muted">No data</div>'; return; }
+      const max = Math.max(...entries.map(([,v])=> v)) || 1;
+      el.innerHTML = entries.map(([label,val])=>`
+        <div class="stat-row small" style="--w:${labelWidth}px">
+          <div class="label" style="flex-basis:${labelWidth}px">${label}</div>
+          <div class="bar"><span style="width:${clamp((val/max)*100,4,100)}%"></span></div>
+          <div class="val">${val.toFixed(digits)}</div>
+        </div>
+      `).join('');
     }
+
+    function renderYearTrend(el, map){
+      const years = Object.keys(map).map(Number).sort((a,b)=> a-b);
+      if(!years.length){ el.innerHTML = '<div class="muted">No data</div>'; return; }
+      const minY = years[0], maxY = years[years.length-1];
+      const maxVal = Math.max(...years.map(y=> map[y]||0)) || 1;
+      const cols = years.map(y=>{
+        const h = Math.round(((map[y]||0)/maxVal) * 100);
+        return `<div class="col" title="${y}: ${num(map[y]||0)}" style="height:${clamp(h,5,100)}%" aria-label="${y}: ${num(map[y]||0)}"></div>`;
+      }).join('');
+      el.innerHTML = `<div class="mini-bars">${cols}</div><div class="mini-legend"><span>${minY}</span><span>${maxY}</span></div>`;
+    }
+
+    function renderRuntime(el, buckets){
+      const entries = Object.entries(buckets);
+      const max = Math.max(...entries.map(([,v])=> v)) || 1;
+      el.innerHTML = entries.map(([label,val])=>`
+        <div class="stat-row">
+          <div class="label">${label} min</div>
+          <div class="bar"><span style="width:${clamp((val/max)*100,4,100)}%"></span></div>
+          <div class="val">${num(val)}</div>
+        </div>
+      `).join('');
+    }
+
+    // --- New renderers ---
+    function renderProgress(el, {seriesProgress, nextUp}){
+      el.innerHTML = `
+        <div class="stat-row">
+          <div class="label">Series Progress</div>
+          <div class="bar"><span style="width:${seriesProgress.percent}%"></span></div>
+          <div class="val">${seriesProgress.percent}%</div>
+        </div>
+        <div class="muted-sm">${num(seriesProgress.watched)} / ${num(seriesProgress.total)} episodes watched</div>
+        <div class="list">
+          <div class="muted" style="margin:10px 0 4px">Next up</div>
+          ${nextUp.slice(0,6).map(n=>`
+            <div class="item">
+              <span class="pill">${n.code}</span>
+              <div style="flex:1">${n.title}</div>
+              <span class="muted-sm">${n.when? n.when:''}</span>
+            </div>
+          `).join('') || '<div class="muted">No upcoming episodes</div>'}
+        </div>
+      `;
+    }
+
+    function renderBacklog(el, totals, planToWatch, seriesProgress){
+      const open = Math.max(0, (seriesProgress.total||0) - (seriesProgress.watched||0));
+      el.innerHTML = `
+        <div class="kpi-grid">
+          <div class="kpi"><div class="big-num">${num(open)}</div><div class="muted-sm">Open Episodes</div></div>
+          <div class="kpi"><div class="big-num">${num(totals.watchlist)}</div><div class="muted-sm">On Watchlist</div></div>
+          <div class="kpi"><div class="big-num">${num(planToWatch.movies + planToWatch.series)}</div><div class="muted-sm">Plan to Watch</div></div>
+        </div>
+        <div class="muted-sm" style="margin-top:8px">Movies (plan): ${num(planToWatch.movies)} • Series (plan): ${num(planToWatch.series)}</div>
+      `;
+    }
+
+    function renderRatingHistogram(el, hist){
+      const entries = Object.entries(hist).map(([k,v])=> [Number(k), v]).sort((a,b)=> a[0]-b[0]);
+      const max = Math.max(...entries.map(([,v])=> v)) || 1;
+      el.innerHTML = entries.map(([stars,val])=>`
+        <div class="stat-row">
+          <div class="label">${stars}★</div>
+          <div class="bar"><span style="width:${clamp((val/max)*100,4,100)}%"></span></div>
+          <div class="val">${num(val)}</div>
+        </div>
+      `).join('');
+    }
+
+    function renderAvgYear(el, map){
+      const years = Object.keys(map).map(Number).sort((a,b)=> a-b);
+      if(!years.length){ el.innerHTML = '<div class="muted">No data</div>'; return; }
+      const cols = years.map(y=>{
+        const v = map[y]||0; const h = clamp(Math.round((v/5)*100), 5, 100);
+        return `<div class="col" title="${y}: ${v.toFixed(1)}★" style="height:${h}%"></div>`;
+      }).join('');
+      el.innerHTML = `<div class="mini-bars">${cols}</div><div class="mini-legend"><span>${years[0]}</span><span>${years[years.length-1]}</span></div>`;
+    }
+
+    function renderAdds12(el, map){
+      const keys = Object.keys(map);
+      if(!keys.length){ el.innerHTML = '<div class="muted">No data</div>'; return; }
+      const max = Math.max(...keys.map(k=> map[k]||0)) || 1;
+      const cols = keys.map(k=>{
+        const h = clamp(Math.round((map[k]/max)*100), 5, 100);
+        return `<div class="col" title="${k}: ${num(map[k]||0)}" style="height:${h}%"></div>`;
+      }).join('');
+      el.innerHTML = `<div class="mini-bars">${cols}</div><div class="mini-legend"><span>${keys[0]}</span><span>${keys[keys.length-1]}</span></div>`;
+    }
+
+    function renderCompletion(el, c){
+      el.innerHTML = `
+        <div class="stat-row">
+          <div class="label">Movies</div>
+          <div class="bar"><span style="width:${c.movies.rate}%"></span></div>
+          <div class="val">${c.movies.rate}%</div>
+        </div>
+        <div class="muted-sm">Completed ${num(c.movies.completed)} / Started ${num(c.movies.started)}</div>
+        <div class="stat-row" style="margin-top:10px">
+          <div class="label">Series</div>
+          <div class="bar"><span style="width:${c.series.rate}%"></span></div>
+          <div class="val">${c.series.rate}%</div>
+        </div>
+        <div class="muted-sm">Completed ${num(c.series.completed)} / Started ${num(c.series.started)}</div>
+      `;
+    }
+
+    function renderMovieBuckets(el, buckets){
+      const entries = Object.entries(buckets);
+      const max = Math.max(...entries.map(([,v])=> v)) || 1;
+      el.innerHTML = entries.map(([label,val])=>`
+        <div class="stat-row">
+          <div class="label">${label}</div>
+          <div class="bar"><span style="width:${clamp((val/max)*100,4,100)}%"></span></div>
+          <div class="val">${num(val)}</div>
+        </div>
+      `).join('');
+    }
+
+    function renderWatchtime(el, wt){
+      const seenPct = pct(wt.seenMin, wt.totalMin||1);
+      el.innerHTML = `
+        <div class="kpi-grid">
+          <div class="kpi"><div class="big-num">${hhmm(wt.seenMin)}</div><div class="muted-sm">Seen</div></div>
+          <div class="kpi"><div class="big-num">${hhmm(wt.remainingMin)}</div><div class="muted-sm">Remaining</div></div>
+          <div class="kpi"><div class="big-num">${hhmm(wt.totalMin)}</div><div class="muted-sm">Total</div></div>
+        </div>
+        <div class="stat-row" style="margin-top:10px">
+          <div class="label">Overall</div>
+          <div class="bar"><span style="width:${seenPct}%"></span></div>
+          <div class="val">${seenPct}%</div>
+        </div>
+      `;
+    }
+
+    // ---------- Run ----------
+    function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.style.display='block'; setTimeout(()=>t.style.display='none',1500); }
+
+    (async ()=>{
+      try{
+        const {movies, series} = await fetchAll();
+        state.movies = movies; state.series = series;
+        const s = computeStats(movies, series);
+
+        renderTotals(document.getElementById('totals'), s.totals);
+        renderAvg(document.getElementById('avg'), s.avg);
+
+        // Fortschritt & Backlog
+        renderProgress(document.getElementById('progress'), {seriesProgress: s.seriesProgress, nextUp: s.nextUp});
+        renderBacklog(document.getElementById('backlog'), s.totals, s.planToWatch, s.seriesProgress);
+
+        // Bewertungen & Präferenzen
+        renderRatingHistogram(document.getElementById('ratingHist'), s.ratingHist);
+        renderBarListNumeric(document.getElementById('avgGenre'), s.avgByGenre, {limit:12, digits:1, labelWidth:160});
+        renderBarList(document.getElementById('genres'), s.genres, {limit:14});
+        renderBarList(document.getElementById('platforms'), s.platforms, {limit:10});
+
+        // Trends
+        renderAdds12(document.getElementById('adds12'), s.adds12);
+        renderAvgYear(document.getElementById('avgYear'), s.avgByYear);
+        renderYearTrend(document.getElementById('yearTrend'), s.years);
+
+        // Runtime
+        renderRuntime(document.getElementById('runtime'), s.runtimeBuckets);
+
+        // Engagement & Abschluss
+        renderCompletion(document.getElementById('completion'), s.completion);
+        renderMovieBuckets(document.getElementById('movieBuckets'), s.movieProgBuckets);
+
+        // Zeitaufwand
+        renderWatchtime(document.getElementById('watchtime'), s.watchtime);
+      }catch(err){
+        console.warn('Firestore failed, falling back to sample-data.json', err);
+        try{
+          const res = await fetch('sample-data.json');
+          const data = await res.json();
+          state.movies = data.movies||[]; state.series = data.series||[];
+          const s = computeStats(state.movies, state.series);
+
+          renderTotals(document.getElementById('totals'), s.totals);
+          renderAvg(document.getElementById('avg'), s.avg);
+
+          renderProgress(document.getElementById('progress'), {seriesProgress: s.seriesProgress, nextUp: s.nextUp});
+          renderBacklog(document.getElementById('backlog'), s.totals, s.planToWatch, s.seriesProgress);
+
+          renderRatingHistogram(document.getElementById('ratingHist'), s.ratingHist);
+          renderBarListNumeric(document.getElementById('avgGenre'), s.avgByGenre, {limit:12, digits:1, labelWidth:160});
+          renderBarList(document.getElementById('genres'), s.genres, {limit:14});
+          renderBarList(document.getElementById('platforms'), s.platforms, {limit:10});
+
+          renderAdds12(document.getElementById('adds12'), s.adds12);
+          renderAvgYear(document.getElementById('avgYear'), s.avgByYear);
+          renderYearTrend(document.getElementById('yearTrend'), s.years);
+
+          renderRuntime(document.getElementById('runtime'), s.runtimeBuckets);
+
+          renderCompletion(document.getElementById('completion'), s.completion);
+          renderMovieBuckets(document.getElementById('movieBuckets'), s.movieProgBuckets);
+
+          renderWatchtime(document.getElementById('watchtime'), s.watchtime);
+
+          showToast('Using sample data');
+        }catch(e){
+          document.getElementById('totals').textContent = 'Failed to load data.';
+        }
+      }
+    })();
   </script>
 </body>
 </html>

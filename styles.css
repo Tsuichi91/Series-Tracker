@@ -61,7 +61,7 @@ header{
   padding:6px 6px 6px 8px; scroll-snap-type:x mandatory
 }
 
-/* Card – full width by default; small only inside scrollers */
+/* Card – Basis */
 .card{
   background:var(--card); border:1px solid var(--border);
   border-radius:14px; box-shadow:var(--shadow);
@@ -69,9 +69,10 @@ header{
 }
 .card:hover{transform:translateY(-3px);box-shadow:0 14px 34px rgba(0,0,0,.45)}
 
-/* Small gallery cards */
+/* Kleine Karten in horizontalen Scrollers */
 .scroller .card{width:168px; flex:0 0 auto; scroll-snap-align:start}
 
+/* Poster & Inhalt */
 .poster{
   position:relative; width:100%; aspect-ratio:2/3;
   border-radius:12px 12px 0 0; overflow:hidden; background:#0f0f0f
@@ -98,7 +99,7 @@ header{
 .btn:hover{background:var(--chip-press)}
 .btn.active{background:rgba(45,212,191,.15);border-color:var(--accent)}
 
-/* Tables & forms */
+/* Tabellen & Formulare */
 .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 .field{display:flex;flex-direction:column;gap:6px}
 .field input,.field select,.field textarea{
@@ -110,7 +111,7 @@ header{
 .table th{background:#0f0f0f}
 .toolbar{
   display:flex; gap:12px; margin:12px 0;
-  flex-wrap:wrap; align-items:center; /* keeps auth line neat */
+  flex-wrap:wrap; align-items:center;
 }
 
 /* Overlays */
@@ -138,20 +139,90 @@ header{
   padding:10px 14px; border-radius:10px; display:none; box-shadow:var(--shadow)
 }
 
-/* Misc */
+/* Episodenliste & Chips */
 .ep{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)}
 .ep code{opacity:.8}
 .ep .sp{margin-left:auto}
 .pill{display:inline-flex;gap:6px;align-items:center;background:var(--chip);border:1px solid var(--border);padding:6px 10px;border-radius:999px}
 
-/* Make content cards (admin/dashboard sections) full width nicely */
-main .card{width:auto;max-width:980px;margin:16px auto}
+/* --- WICHTIG: nur Abschnitts-Karten breit, NICHT Galerie-Karten --- */
+main > .card{width:auto;max-width:980px;margin:16px auto}
+
+/* Übersicht als Kachel-Grid */
+.card-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill, minmax(168px, 1fr));
+  gap:12px;
+}
+.card-grid .card{
+  margin:0;
+  max-width:unset;
+  width:auto;
+}
+
+/* Detail-Layout (Movie/Series Overlay) */
+.page-index .panel{ width:min(1100px,94vw); padding:22px; }
+.detail-header{ display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:8px; }
+.detail-title{ font-size:2rem; font-weight:800; margin:0; }
+.detail-close{ background:var(--chip); border:1px solid var(--border); border-radius:10px; padding:6px 10px; cursor:pointer; }
+.detail-close:hover{ background:var(--chip-press); }
+.detail-two-col{ display:grid; grid-template-columns:260px 1fr; gap:22px; align-items:start; }
+.detail-poster{ width:260px; border-radius:12px; border:1px solid var(--border); background:#0d0d0d; overflow:hidden; }
+.meta{ display:flex; flex-direction:column; gap:16px; margin-top:6px; }
+.meta .row{ display:grid; grid-template-columns:180px 1fr; gap:12px; }
+.meta label{ opacity:.9; }
+.desc{ margin-top:14px; opacity:.95; }
+/* dickerer Balken im Overlay */
+.panel .progress{ height:8px; margin-top:6px; }
 
 /* Responsive */
 @media (max-width:1100px){
-  main .card{max-width:100%}
+  main > .card{max-width:100%}
 }
 @media (max-width:800px){
   .grid{grid-template-columns:1fr}
   .scroller .card{width:150px}
+  .card-grid{grid-template-columns:repeat(auto-fill, minmax(150px, 1fr))}
 }
+
+/* Overlay über Header + Scroll-Lock (vom Nutzer gewünscht) */
+.overlay{ z-index: 2000; }
+body.modal-open{ overflow: hidden; }
+
+/* Dark dropdowns (select + option) */
+.chip select {
+  color: var(--text);
+  background-color: var(--chip);   /* geschlossenes Feld */
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 28px 6px 10px;
+  appearance: none;                 /* konsistente Darstellung */
+}
+
+/* Pfeil in heller Farbe (optional, für konsistenten Look) */
+.chip select {
+  background-image: url("data:image/svg+xml;utf8,\
+<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23ECECEC' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 12px 12px;
+}
+
+/* Hover/Focus */
+.chip select:hover { background-color: var(--chip-press); }
+.chip select:focus { outline: 2px solid var(--accent); outline-offset: 0; }
+
+/* Geöffnete Liste */
+.chip select option {
+  background-color: #0f0f0f; /* dunkler Menü-Hintergrund */
+  color: var(--text);
+}
+
+/* Für Gruppen in großen Genre-Listen, falls genutzt */
+.chip select optgroup {
+  background-color: #0f0f0f;
+  color: var(--muted);
+}
+
+/* System-Hint: Menüs im Dark-Mode rendern (hilft Safari/Firefox) */
+:root, body, .chip select { color-scheme: dark; }

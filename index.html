@@ -5,8 +5,40 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Watch Tracker • Overview</title>
   <link rel="stylesheet" href="styles.css" />
+  <style>
+    /* Page-specific: compact grid for overview */
+    .page-index .card-grid{
+      display:grid;
+      grid-template-columns:repeat(auto-fill, minmax(168px,1fr));
+      gap:12px;
+    }
+    .page-index .card-grid .card{ margin:0; }
+    @media (min-width:1200px){
+      .page-index .card-grid{ grid-template-columns:repeat(auto-fill, minmax(184px,1fr)); }
+    }
+    #sentinel{ height:32px; }
+
+    /* Detail panel layout */
+    .page-index .panel{ width:min(1100px,94vw); padding:22px; }
+    .detail-header{ display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:8px; }
+    .detail-title{ font-size:2rem; font-weight:800; margin:0; }
+    .detail-close{ background:var(--chip); border:1px solid var(--border); border-radius:10px; padding:6px 10px; cursor:pointer;}
+    .detail-close:hover{ background:var(--chip-press); }
+    .detail-two-col{ display:grid; grid-template-columns:260px 1fr; gap:22px; align-items:start; }
+    .detail-poster{ width:260px; border-radius:12px; border:1px solid var(--border); background:#0d0d0d; overflow:hidden; }
+    .meta{ display:flex; flex-direction:column; gap:16px; margin-top:6px; }
+    .meta .row{ display:grid; grid-template-columns:180px 1fr; gap:12px; }
+    .meta label{ opacity:.9; }
+    .desc{ margin-top:14px; opacity:.95; }
+    .panel .progress{ height:8px; margin-top:6px; }
+
+    /* Tabs */
+    .tabs{ display:flex; gap:8px; padding:10px 16px; border-bottom:1px solid var(--border); }
+    .tab-btn{ background:var(--chip); border:1px solid var(--border); color:var(--text); padding:8px 12px; border-radius:999px; cursor:pointer; }
+    .tab-btn.active{ border-color:var(--accent); box-shadow:0 0 0 2px rgba(45,212,191,.15) inset; }
+  </style>
 </head>
-<body>
+<body class="page-index">
   <header>
     <div class="bar">
       <div class="logo"><span class="logo-icon"></span><span>Watch Tracker</span></div>
@@ -14,14 +46,13 @@
       <a class="link-btn" href="dashboard.html">📊 Dashboard</a>
       <a class="link-btn" href="admin.html">🛠 Admin</a>
     </div>
-    <div class="filters">
-      <div class="chip"><label>Type</label>
-        <select id="fType">
-          <option value="all">All</option>
-          <option value="movies">Movies</option>
-          <option value="series">Series</option>
-        </select>
-      </div>
+
+    <!-- Tab bar -->
+    <div class="tabs">
+      <button class="tab-btn active" id="tabMovies">Movies</button>
+      <button class="tab-btn" id="tabSeries">Series</button>
+      <div class="spacer"></div>
+      <!-- Filters (type filter removed because tabs handle it) -->
       <div class="chip"><label>Genre</label>
         <select id="fGenre"><option value="">All</option></select>
       </div>
@@ -43,25 +74,33 @@
   </header>
 
   <main class="container">
-    <!-- 1) Top Rated -->
+    <!-- Top Rated (horizontal) -->
     <section class="row">
-      <h2>Top Rated Serien / Filme</h2>
+      <h2 id="topHeading">Top Rated Movies</h2>
       <div class="scroller" id="rowTop"></div>
     </section>
 
-    <!-- 2) Übersicht -->
+    <!-- Overview (Grid + Infinite Scroll) -->
     <section class="row">
-      <h2>Übersicht aller Serien / Filme</h2>
-      <div class="scroller" id="rowAll"></div>
+      <h2 id="allHeading">All Movies</h2>
+      <div class="card-grid" id="gridAll"></div>
+      <div id="noResults" class="muted" style="display:none;margin:8px">No results</div>
+      <div id="sentinel"></div>
     </section>
   </main>
 
+  <!-- Movie Detail Overlay -->
+  <div class="overlay" id="movieOverlay" style="display:none">
+    <div class="panel" id="moviePanel"></div>
+  </div>
+
   <!-- Series Detail Overlay -->
-  <div class="overlay" id="seriesOverlay">
+  <div class="overlay" id="seriesOverlay" style="display:none">
     <div class="panel">
       <div id="seriesHeader"></div>
       <div class="muted" id="seriesMeta"></div>
       <div style="margin:8px 0"><div class="progress"><span id="seriesBar" style="width:0%"></span></div></div>
+      <div class="desc" id="seriesDesc"></div>
       <div class="row-body" id="seasonsHost"></div>
     </div>
   </div>
@@ -69,7 +108,7 @@
   <div class="toast" id="toast"></div>
 
   <script type="module">
-    // ---------- Firebase ----------
+    /* ---------- Firebase ---------- */
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
     import { getFirestore, collection, getDocs, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
@@ -79,51 +118,109 @@
       }
       throw new Error("Missing firebase.config.json");
     }
-
     const cfg = await loadConfig();
     const app = initializeApp(cfg);
     const db  = getFirestore(app);
 
-    // ---------- Helpers ----------
-    const nowISO = () => new Date().toISOString();
+    /* ---------- Helpers ---------- */
     const pad = v => String(v).padStart(2,"0");
-    const toDDMMYYYY = iso => { if(!iso) return ""; const d=new Date(iso); if(isNaN(d)) return iso; return `${pad(d.getDate())}.${pad(d.getMonth()+1)}.${d.getFullYear()}`; };
-    const pct = (a,b) => b<=0?0:Math.round((a/b)*100);
 
+    // Very robust date formatter
+    function formatDateFromAny(value){
+      if(value == null || value === '') return '';
+      if (typeof value === 'object' && typeof value.seconds === 'number'){
+        return fmt(new Date(value.seconds * 1000));
+      }
+      if (typeof value === 'number') return fromNumeric(value);
+
+      const s = String(value).trim();
+      if (/^\d+$/.test(s)) return fromNumeric(Number(s));
+
+      let m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/); if (m) return `${m[3]}.${m[2]}.${m[1]}`;
+      m = s.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);     if (m) return `${m[1]}.${m[2]}.${m[3]}`;
+      m = s.match(/^(\d{4})\/(\d{2})\/(\d{2})$/);     if (m) return `${m[3]}.${m[2]}.${m[1]}`;
+      m = s.match(/^(\d{4})(\d{2})(\d{2})$/);         if (m) return `${m[3]}.${m[2]}.${m[1]}`;
+
+      const d = new Date(s);
+      return isNaN(d.getTime()) ? '' : fmt(d);
+
+      function fromNumeric(n){
+        if (n > 1e12) return fmt(new Date(n));          // unix ms
+        if (n > 1e9 && n < 1e12) return fmt(new Date(n*1000)); // unix s
+        if (n >= 60 && n < 100000){ // Excel serial (days since 1899-12-30)
+          const excelEpoch = Date.UTC(1899, 11, 30);
+          const ms = excelEpoch + Math.round(n)*86400000;
+          return fmt(new Date(ms));
+        }
+        return '';
+      }
+      function fmt(d){
+        const y = d.getUTCFullYear();
+        if (y < 1900 || y > 3000) return '';
+        return `${pad(d.getUTCDate())}.${pad(d.getUTCMonth()+1)}.${y}`;
+      }
+    }
+
+    const pct = (a,b) => b<=0?0:Math.round((a/b)*100);
+    const hhmmFromMinutes = m => {
+      const min = Math.max(0, Number(m)||0);
+      const h = Math.floor(min/60); const mm = min%60;
+      return `${pad(h)}:${pad(mm)}`;
+    };
     function seasonProgress(season){
       const eps = season.episodes||[]; const watched = eps.filter(e=>e.watched).length; const total = eps.length; return {watched,total,percent:pct(watched,total)};
     }
     function seriesGlobalProgress(serie){
-      const seasons = serie.seasons||[]; let watched=0,total=0; seasons.forEach(s=>{watched+= (s.episodes||[]).filter(e=>e.watched).length; total+= (s.episodes||[]).length;}); return {watched,total,percent:pct(watched,total)};
+      const seasons = serie.seasons||[]; let watched=0,total=0;
+      seasons.forEach(s=>{ const eps=s.episodes||[]; watched+=eps.filter(e=>e.watched).length; total+=eps.length; });
+      return {watched,total,percent:pct(watched,total)};
+    }
+    function movieProgress(movie){
+      const status = (movie.status||'').toLowerCase();
+      if(['completed','finished','watched'].includes(status)) return 100;
+      const runtimeSec = Math.max(0, (Number(movie.runtime_min)||0) * 60);
+      const pos = Math.max(0, Number(movie.last_position_seconds)||0);
+      if(runtimeSec <= 0) return 0;
+      const p = Math.round((pos / runtimeSec) * 100);
+      return Math.max(0, Math.min(100, p >= 95 ? 100 : p));
     }
     function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.style.display='block'; setTimeout(()=>t.style.display='none',1500); }
 
-    // ---------- State ----------
-    const state = { items:[], query:'', sort:'title', filters:{ type:'all', genre:'', year:'' } };
+    /* ---------- State ---------- */
+    const state = {
+      items: [],
+      activeTab: 'movies',  // 'movies' | 'series'
+      query: '',
+      sort: 'title',
+      filters: { genre:'', year:'' },
+      filteredAll: [],
+      pageSize: 24,
+      pageIndex: 0,
+      io: null
+    };
 
-    // ---------- Fetch ----------
+    /* ---------- Fetch ---------- */
     async function fetchAll(){
       const out=[];
       for (const name of ["movies","series"]) {
         try {
           const snap = await getDocs(query(collection(db,name), orderBy("updated_at","desc")));
-          snap.forEach(doc=> out.push({ id:doc.id, type:name.slice(0,-1), ...doc.data() }));
-        } catch (err) {
-          // Fallback ohne orderBy (falls Feld/Index fehlt)
+          snap.forEach(doc=> out.push({ id:doc.id, type: name === "movies" ? "movie" : "series", ...doc.data() }));
+        } catch {
           const snap = await getDocs(collection(db,name));
-          snap.forEach(doc=> out.push({ id:doc.id, type:name.slice(0,-1), ...doc.data() }));
+          snap.forEach(doc=> out.push({ id:doc.id, type: name === "movies" ? "movie" : "series", ...doc.data() }));
         }
       }
       state.items = out;
-      populateFilterOptions();
-      renderAll();
+      setTab('movies'); // default
     }
 
-    // ---------- UI ----------
+    /* ---------- UI ---------- */
     function renderStars(v){ const full=Math.round(v||0); return '★★★★★'.slice(0,full)+'☆☆☆☆☆'.slice(full); }
 
     function buildCard(item){
       const isSeries = (item.type==='series');
+      const percent = isSeries ? seriesGlobalProgress(item).percent : movieProgress(item);
       const el = document.createElement('div'); el.className='card';
       el.innerHTML = `
         <div class="poster">
@@ -134,25 +231,27 @@
           <div class="title">${item.title_en||''}</div>
           <div class="subtitle">${item.title_original||''}</div>
           <div class="stars">${renderStars(item.rating)}</div>
-          ${ isSeries ? `<div class='progress'><span style='width:${seriesGlobalProgress(item).percent}%'></span></div>` : ''}
+          <div class='progress'><span style='width:${percent}%'></span></div>
           <div class="actions">
-            ${ isSeries ? '<button class="btn" data-open="1">Open</button>' : ''}
-            <button class="btn ${item.favorite?'active':''}" data-fav="1">♥</button>
-            <button class="btn ${item.on_watchlist?'active':''}" data-wl="1">Watchlist</button>
+            <button class="btn" data-details="1">Details</button>
           </div>
         </div>`;
-      if(isSeries){ el.querySelector('[data-open]')?.addEventListener('click',()=> openSeriesDetail(item)); el.querySelector('.poster').addEventListener('click',()=> openSeriesDetail(item)); }
-      el.querySelector('[data-fav]')?.addEventListener('click',()=>{ item.favorite=!item.favorite; showToast(item.favorite? 'Added to Favorites':'Removed from Favorites'); renderAll(); });
-      el.querySelector('[data-wl]')?.addEventListener('click',()=>{ item.on_watchlist=!item.on_watchlist; showToast(item.on_watchlist? 'Added to Watchlist':'Removed from Watchlist'); renderAll(); });
+      const open = ()=> isSeries ? openSeriesDetail(item) : openMovieDetail(item);
+      el.querySelector('[data-details]').addEventListener('click', open);
+      el.querySelector('.poster').addEventListener('click', open);
       return el;
     }
 
     function filterAndSort(arr){
+      const typeWant = state.activeTab === 'movies' ? 'movie' : 'series';
       const f = state.filters;
-      let a = arr.filter(x=> (f.type==='all' || x.type===f.type)
+      let a = arr.filter(x=> x.type===typeWant
         && (!f.genre || (x.genres||[]).includes(f.genre))
         && (!f.year || String(x.year)===String(f.year))
-        && (!state.query || ((x.title_en||'').toLowerCase().includes(state.query) || (x.title_original||'').toLowerCase().includes(state.query) || (x.tags||[]).join(' ').toLowerCase().includes(state.query) || (x.genres||[]).join(' ').toLowerCase().includes(state.query)))
+        && (!state.query || ((x.title_en||'').toLowerCase().includes(state.query)
+          || (x.title_original||'').toLowerCase().includes(state.query)
+          || (x.tags||[]).join(' ').toLowerCase().includes(state.query)
+          || (x.genres||[]).join(' ').toLowerCase().includes(state.query)))
       );
       const s = state.sort;
       a.sort((x,y)=> s==='title'? (x.title_en||'').localeCompare(y.title_en||'')
@@ -163,19 +262,55 @@
       return a;
     }
 
-    function renderRow(id, items){ const host=document.getElementById(id); host.innerHTML=''; items.forEach(i=> host.appendChild(buildCard(i))); }
+    function renderRow(id, items){
+      const host=document.getElementById(id); host.innerHTML='';
+      items.forEach(i=> host.appendChild(buildCard(i)));
+    }
+
+    /* ---------- Grid + Infinite Scroll ---------- */
+    function resetGrid(){
+      state.pageIndex = 0;
+      document.getElementById('gridAll').innerHTML = '';
+      document.getElementById('noResults').style.display = state.filteredAll.length ? 'none' : 'block';
+    }
+    function loadNextPage(){
+      const start = state.pageIndex * state.pageSize;
+      const end   = start + state.pageSize;
+      const slice = state.filteredAll.slice(start, end);
+      const host  = document.getElementById('gridAll');
+      slice.forEach(item => host.appendChild(buildCard(item)));
+      state.pageIndex++;
+      if(end >= state.filteredAll.length && state.io){ state.io.disconnect(); }
+    }
+    function setupInfiniteScroll(){
+      if(state.io){ state.io.disconnect(); }
+      const sentinel = document.getElementById('sentinel');
+      state.io = new IntersectionObserver((entries)=>{
+        entries.forEach(e => { if(e.isIntersecting){ loadNextPage(); } });
+      }, { rootMargin: '200px 0px' });
+      state.io.observe(sentinel);
+    }
+
     function computeTop(items){ return items.filter(x=> (x.rating||0)>=4).slice(0,30); }
 
     function renderAll(){
       const filtered = filterAndSort(state.items);
+      // Headings depend on tab
+      const isMovies = state.activeTab === 'movies';
+      document.getElementById('topHeading').textContent = isMovies ? 'Top Rated Movies' : 'Top Rated Series';
+      document.getElementById('allHeading').textContent = isMovies ? 'All Movies' : 'All Series';
+
       renderRow('rowTop', computeTop(filtered));
-      renderRow('rowAll', filtered);
-      populateFilterOptions(); // keep genre/year options fresh after changes
+      state.filteredAll = filtered;
+      resetGrid();
+      if(state.filteredAll.length){ setupInfiniteScroll(); }
+      populateFilterOptions();
     }
 
     function unique(values){ return Array.from(new Set(values.filter(Boolean))).sort(); }
     function populateFilterOptions(){
-      const items = state.items.filter(x=> state.filters.type==='all' || x.type===state.filters.type);
+      const typeWant = state.activeTab === 'movies' ? 'movie' : 'series';
+      const items = state.items.filter(x=> x.type===typeWant);
       const genres = unique(items.flatMap(x=> x.genres||[]));
       const years  = unique(items.map(x=> x.year));
       const gSel=document.getElementById('fGenre'); const ySel=document.getElementById('fYear');
@@ -184,12 +319,60 @@
       ySel.innerHTML = '<option value="">All</option>'+years.map(y=>`<option ${String(y)===String(yVal)?'selected':''}>${y}</option>`).join('');
     }
 
-    // ---------- Series detail ----------
+    /* ---------- Movie detail ---------- */
+    function openMovieDetail(movie){
+      const runtimeMin = Number(movie.runtime_min)||0;
+      const runtimeHHMM = hhmmFromMinutes(runtimeMin);
+      const percent = movieProgress(movie);
+      const release = formatDateFromAny(movie.release_date);
+      const posterFallback = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 600'%3E%3Crect width='100%25' height='100%25' fill='%230d0d0d'/%3E%3Ctext x='50%25' y='50%25' fill='%23bbb' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='20'%3ENo Image%3C/text%3E%3C/svg%3E";
+
+      const panel = document.getElementById('moviePanel');
+      panel.innerHTML = `
+        <div class="detail-header">
+          <h2 class="detail-title">${movie.title_en||''}</h2>
+          <button class="detail-close" id="movieCloseBtn">×</button>
+        </div>
+
+        <div class="detail-two-col">
+          <div><img class="detail-poster" src="${movie.poster||posterFallback}" alt="Poster" onerror="this.src='${posterFallback}'"></div>
+          <div>
+            <div class="meta">
+              <div class="row"><label>Original Title:</label><span>${movie.title_original||'—'}</span></div>
+              <div class="row"><label>Release Date:</label><span>${release||'—'}</span></div>
+              <div class="row"><label>Runtime:</label><span>${runtimeMin? runtimeMin+' min' : '—'}</span></div>
+              <div class="row"><label>Age Rating:</label><span>${movie.age_rating||'—'}</span></div>
+              <div class="row"><label>Genres:</label><span>${(movie.genres||[]).join(', ')||'—'}</span></div>
+              <div class="row"><label>Runtime (in HH:MM):</label><span>${runtimeMin? runtimeHHMM : '—'}</span></div>
+            </div>
+            <div class="progress"><span style="width:${percent}%"></span></div>
+            <div class="desc">${movie.short_description? movie.short_description : ''}</div>
+          </div>
+        </div>
+      `;
+      document.getElementById('movieOverlay').style.display='flex';
+      document.body.classList.add('modal-open');
+      document.getElementById('movieCloseBtn').addEventListener('click', ()=>{
+        document.getElementById('movieOverlay').style.display='none';
+        document.body.classList.remove('modal-open');
+      });
+    }
+
+    /* ---------- Series detail ---------- */
     function openSeriesDetail(serie){
-      document.getElementById('seriesHeader').innerHTML = `<h3>${serie.title_en}</h3><div class='muted'>${serie.title_original||''}</div>`;
+      document.getElementById('seriesHeader').innerHTML = `
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
+          <div>
+            <h3 style="margin:0">${serie.title_en||''}</h3>
+            <div class='muted'>${serie.title_original||''}</div>
+          </div>
+          <button class="detail-close" id="seriesCloseBtn">×</button>
+        </div>`;
       const bits = [String(serie.year||'').trim(), (serie.platform||'').trim(), (serie.episode_length_min? (serie.episode_length_min+" min") : ''), (serie.series_status||'').trim()].filter(Boolean);
       document.getElementById('seriesMeta').textContent = bits.join(' • ');
       document.getElementById('seriesBar').style.width = seriesGlobalProgress(serie).percent+"%";
+      document.getElementById('seriesDesc').textContent = serie.short_description || '';
+
       const host = document.getElementById('seasonsHost'); host.innerHTML='';
       (serie.seasons||[]).forEach(season=>{
         const prog = seasonProgress(season);
@@ -198,28 +381,45 @@
         box.innerHTML = `<div style='display:flex;align-items:center;gap:8px'><strong>Season ${season.season_number}</strong><span class='muted'>${prog.watched}/${prog.total} eps</span><div class='progress' style='flex:1;max-width:200px'><span style='width:${prog.percent}%'></span></div></div>`;
         (season.episodes||[]).forEach(ep=>{
           const row = document.createElement('div'); row.className='ep';
-          row.innerHTML = `<code>${ep.code}</code> <span>${ep.title||''}</span> <span class='muted'>${toDDMMYYYY(ep.air_date)}</span>`;
+          row.innerHTML = `<code>${ep.code}</code> <span>${ep.title||''}</span> <span class='muted'>${formatDateFromAny(ep.air_date)}</span>`;
           box.appendChild(row);
         });
         host.appendChild(box);
       });
       document.getElementById('seriesOverlay').style.display='flex';
+      document.body.classList.add('modal-open');
+      document.getElementById('seriesCloseBtn').addEventListener('click', ()=>{
+        document.getElementById('seriesOverlay').style.display='none';
+        document.body.classList.remove('modal-open');
+      });
     }
-    document.getElementById('seriesOverlay').addEventListener('click', (e)=>{ if(e.target.id==='seriesOverlay') e.currentTarget.style.display='none'; });
 
-    // ---------- Filters & Search ----------
-    document.getElementById('fType').addEventListener('change', e=>{ state.filters.type=e.target.value==='all'?'all':e.target.value.slice(0,-0); state.filters.type=e.target.value==='all'?'all':e.target.value.replace(/s$/,''); state.filters.type = e.target.value === 'all' ? 'all' : (e.target.value === 'movies' ? 'movie' : 'series'); renderAll(); });
+    // Backdrop close
+    document.getElementById('movieOverlay').addEventListener('click', (e)=>{ if(e.target.id==='movieOverlay'){ e.currentTarget.style.display='none'; document.body.classList.remove('modal-open'); }});
+    document.getElementById('seriesOverlay').addEventListener('click', (e)=>{ if(e.target.id==='seriesOverlay'){ e.currentTarget.style.display='none'; document.body.classList.remove('modal-open'); }});
+
+    /* ---------- Tabs, Filters, Search ---------- */
+    function setTab(tab){
+      state.activeTab = tab; // 'movies' | 'series'
+      document.getElementById('tabMovies').classList.toggle('active', tab==='movies');
+      document.getElementById('tabSeries').classList.toggle('active', tab==='series');
+      // rerender with new type scope
+      renderAll();
+    }
+    document.getElementById('tabMovies').addEventListener('click', ()=> setTab('movies'));
+    document.getElementById('tabSeries').addEventListener('click', ()=> setTab('series'));
+
     document.getElementById('fGenre').addEventListener('change', e=>{ state.filters.genre=e.target.value; renderAll(); });
     document.getElementById('fYear').addEventListener('change', e=>{ state.filters.year=e.target.value; renderAll(); });
     document.getElementById('sort').addEventListener('change', e=>{ state.sort=e.target.value; renderAll(); });
     document.getElementById('q').addEventListener('input', e=>{ state.query=e.target.value.toLowerCase(); renderAll(); });
 
-    // ---------- Start ----------
+    /* ---------- Start ---------- */
     fetchAll().catch(async err=>{
       console.warn('Firestore failed, falling back to sample-data.json', err);
       const res = await fetch('sample-data.json'); const json = await res.json();
       state.items = [ ...json.movies.map(m=>({...m, type:'movie'})), ...json.series.map(s=>({...s, type:'series'})) ];
-      populateFilterOptions(); renderAll();
+      setTab('movies');
     });
   </script>
 </body>
