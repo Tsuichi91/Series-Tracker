@@ -573,19 +573,22 @@
     }
     document.getElementById('mapImport').addEventListener('click', runImport);
 
-    // ---------- File input dataset react ----------
-    // (handled in change listener above)
-
     // ---------- EDIT TAB ----------
     const editState = { dataset:'movies', list:[], currentId:'', currentDoc:null };
 
-    document.getElementById('editDataset').addEventListener('change', async (e)=>{ editState.dataset = e.target.value; await editReloadList(); });
+    // NEW: normalize dataset names (defensiv)
+    const normalizeDataset = (v) => (v === 'movie' ? 'movies' : v === 'series' ? 'series' : v);
+
+    document.getElementById('editDataset').addEventListener('change', async (e)=>{ 
+      editState.dataset = normalizeDataset(e.target.value); 
+      await editReloadList(); 
+    });
     document.getElementById('editReload').addEventListener('click', editReloadList);
     document.getElementById('editSearch').addEventListener('input', ()=> fillEditSelect());
 
     async function editReloadList(){
       if(!isAuthorized) return;
-      const coll = editState.dataset;
+      const coll = normalizeDataset(editState.dataset);
       const out=[];
       try{
         const snap = await getDocs(query(collection(db, coll), orderBy('title_en','asc')));
@@ -594,9 +597,10 @@
         const snap = await getDocs(collection(db, coll));
         snap.forEach(d=> out.push({ id:d.id, ...d.data() }));
       }
-      // basic sort if fallback
-      out.sort((a,b)=> (a.title_en||'').localeCompare(b.title_en||''));
-      editState.list = out;
+      // Filter soft-deleted & sort
+      const clean = out.filter(x=> x.__deleted !== true)
+                       .sort((a,b)=> (a.title_en||'').localeCompare(b.title_en||''));
+      editState.list = clean;
       fillEditSelect();
     }
 
@@ -606,6 +610,7 @@
       const items = editState.list.filter(x=> !q || (x.title_en||'').toLowerCase().includes(q));
       sel.innerHTML = '<option value="">—</option>' + items.map(x=>{
         const label = `${x.title_en||'(no title)'} ${x.year? '('+x.year+')':''} — ${x.slug||x.id}`;
+        // value = echte Doc-ID, nicht slug
         return `<option value="${x.id}">${label}</option>`;
       }).join('');
       document.getElementById('editMeta').textContent = `${items.length} items`;
@@ -613,15 +618,28 @@
       editState.currentId = ''; editState.currentDoc = null;
     }
 
+    // NEW: robust lookup – erst Doc-ID, dann slug-Fallback
+    async function resolveDocByIdOrSlug(collName, key) {
+      collName = normalizeDataset(collName);
+      // a) per Doc-ID
+      let snap = await getDoc(doc(db, collName, key));
+      if (snap.exists()) return snap;
+      // b) Fallback: suche per slug
+      const all = await getDocs(collection(db, collName));
+      const hit = all.docs.find(d => (d.data()?.slug || '') === key);
+      return hit || null;
+    }
+
     document.getElementById('editSelect').addEventListener('change', async (e)=>{
       const id = e.target.value;
       if(!id){ document.getElementById('editForm').innerHTML=''; return; }
-      const coll = editState.dataset;
-      const ref = doc(db, coll, id);
-      const snap = await getDoc(ref);
-      if(!snap.exists()){ showToast('Item not found'); return; }
-      editState.currentId = id;
-      editState.currentDoc = { id, ...snap.data() };
+      const coll = normalizeDataset(editState.dataset);
+
+      const snap = await resolveDocByIdOrSlug(coll, id);
+      if(!snap){ showToast(`Item not found in ${coll}: ${id}`); return; }
+
+      editState.currentId = snap.id;
+      editState.currentDoc = { id: snap.id, ...snap.data() };
       buildEditForm();
     });
 
@@ -633,7 +651,7 @@
 
     function buildEditForm(){
       const d = editState.currentDoc || {};
-      const isMovie = (editState.dataset==='movies');
+      const isMovie = (normalizeDataset(editState.dataset)==='movies');
 
       const common = [
         fieldRow('efSlug','Slug', `<input id="efSlug" value="${d.slug||d.id||''}" class="readonly" disabled/>`),
@@ -674,8 +692,8 @@
     document.getElementById('editSave').addEventListener('click', async ()=>{
       if(!(auth.currentUser) || !isAuthorized){ showToast('Not authorized'); return; }
       if(!editState.currentId){ showToast('Pick an item first'); return; }
-      const isMovie = (editState.dataset==='movies');
-      const coll = editState.dataset;
+      const isMovie = (normalizeDataset(editState.dataset)==='movies');
+      const coll = normalizeDataset(editState.dataset);
       const id   = editState.currentId;
       const ref  = doc(db, coll, id);
 
@@ -730,7 +748,7 @@
     document.getElementById('editDelete').addEventListener('click', async ()=>{
       if(!(auth.currentUser) || !isAuthorized){ showToast('Not authorized'); return; }
       if(!editState.currentId){ showToast('Pick an item first'); return; }
-      const coll = editState.dataset;
+      const coll = normalizeDataset(editState.dataset);
       const id   = editState.currentId;
       await setDoc(doc(db, coll, id), { __deleted:true, updated_at:new Date().toISOString() }, { merge:true });
       showToast('Marked as deleted (soft delete)');
@@ -739,8 +757,6 @@
 
     // ---------- Import wire ----------
     document.getElementById('mapImport').addEventListener('click', runImport);
-
-    // ---------- File dataset change already handled ----------
 
   </script>
 </body>
