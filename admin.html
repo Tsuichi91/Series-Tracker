@@ -8,6 +8,18 @@
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <!-- XLSX support -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    /* Simple tabs */
+    .tabs { display:flex; gap:8px; margin:12px 0; }
+    .tab-btn { cursor:pointer; }
+    .tab-btn.active{ border-color:var(--accent); box-shadow:0 0 0 2px rgba(45,212,191,.18) inset; }
+    .tab-pane{ display:none; }
+    .tab-pane.active{ display:block; }
+    /* Edit form */
+    .edit-grid{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+    @media (max-width:900px){ .edit-grid{ grid-template-columns:1fr; } }
+    .readonly{ opacity:.8 }
+  </style>
 </head>
 <body>
   <header>
@@ -20,7 +32,7 @@
   </header>
 
   <main class="container">
-    <!-- Auth section is always visible -->
+    <!-- Auth -->
     <section class="card" style="padding:14px">
       <h2>Authentication</h2>
       <div class="toolbar">
@@ -31,67 +43,103 @@
       </div>
     </section>
 
-    <!-- Gate (sign-in + verification via Firestore collection) -->
+    <!-- Gate -->
     <section class="card" id="accessCard" style="padding:14px">
       <h2>Access</h2>
       <div id="gateMsg" class="muted">Please sign in to see the admin tools.</div>
     </section>
 
-    <!-- Admin tools (hidden until authorized) -->
+    <!-- Admin tools -->
     <div id="adminContent" style="display:none">
-      <section class="card" style="padding:14px">
-        <h2>Quick Add</h2>
-        <div class="grid">
-          <div class="field"><label>Type</label>
-            <select id="qaType"><option value="movie">movie</option><option value="series">series</option></select>
+      <!-- Tabs -->
+      <div class="tabs">
+        <button class="icon-btn tab-btn active" data-tab="upload">⬆️ Upload to database</button>
+        <button class="icon-btn tab-btn" data-tab="edit">✏️ Edit records</button>
+      </div>
+
+      <!-- ============ TAB: UPLOAD ============ -->
+      <div id="tab-upload" class="tab-pane active">
+        <!-- Quick Add -->
+        <section class="card" style="padding:14px">
+          <h2>Quick Add</h2>
+          <div class="grid">
+            <div class="field"><label>Type</label>
+              <select id="qaType"><option value="movie">movie</option><option value="series">series</option></select>
+            </div>
+            <div class="field"><label>Title (EN)</label><input id="qaTitle" placeholder="Inception"/></div>
+            <div class="field"><label>Original title</label><input id="qaOriginal" placeholder="오리지널 제목 (optional)"/></div>
+            <div class="field"><label>Year</label><input id="qaYear" type="number" placeholder="2010"/></div>
+            <div class="field"><label>Poster URL</label><input id="qaPoster" placeholder="https://..."/></div>
+            <div class="field"><label>Backdrop URL</label><input id="qaBackdrop" placeholder="https://..."/></div>
+            <div class="field"><label>Genres (pipe | separated)</label><input id="qaGenres" placeholder="Action|Sci-Fi"/></div>
+            <div class="field"><label>Age Rating</label><input id="qaAge" placeholder="PG-13 / FSK 16"/></div>
+            <div class="field"><label>Runtime (min) – movie</label><input id="qaRuntime" type="number" placeholder="148"/></div>
+            <div class="field"><label>Platform – series</label><input id="qaPlatform" placeholder="Netflix"/></div>
           </div>
-          <div class="field"><label>Title (EN)</label><input id="qaTitle" placeholder="Inception"/></div>
-          <div class="field"><label>Original title</label><input id="qaOriginal" placeholder="오리지널 제목 (optional)"/></div>
-          <div class="field"><label>Year</label><input id="qaYear" type="number" placeholder="2010"/></div>
-          <div class="field"><label>Poster URL</label><input id="qaPoster" placeholder="https://..."/></div>
-          <div class="field"><label>Backdrop URL</label><input id="qaBackdrop" placeholder="https://..."/></div>
-          <div class="field"><label>Genres (pipe | separated)</label><input id="qaGenres" placeholder="Action|Sci-Fi"/></div>
-          <div class="field"><label>Age Rating</label><input id="qaAge" placeholder="PG-13 / FSK 16"/></div>
-          <div class="field"><label>Runtime (min) – movie</label><input id="qaRuntime" type="number" placeholder="148"/></div>
-          <div class="field"><label>Platform – series</label><input id="qaPlatform" placeholder="Netflix"/></div>
-        </div>
-        <div class="toolbar">
-          <button class="icon-btn" id="btnQuickAdd">Save</button>
-        </div>
-      </section>
+          <div class="toolbar">
+            <button class="icon-btn" id="btnQuickAdd">Save</button>
+          </div>
+        </section>
 
-      <section class="card" style="padding:14px">
-        <h2>Import (CSV/XLSX) • Mapping & Workbook</h2>
-        <div class="toolbar">
-          <label class="icon-btn" for="csvFile">Choose CSV/XLSX</label>
-          <input id="csvFile" type="file" accept=".csv,.xlsx,.xls" style="display:none" />
-          <span class="pill">Dataset
-            <!-- Achtung: 'episodes' nur für CSV/Einzelsheet; XLSX-Workbook wird automatisch erkannt -->
-            <select id="mapDataset">
-              <option value="movies">movies</option>
-              <option value="series">series</option>
-              <option value="episodes">episodes</option>
-            </select>
-          </span>
-          <span class="pill">Duplicates
-            <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="chkDupSlug" checked> slug</label>
-            <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="chkDupTitleYear" checked> title+year</label>
-          </span>
-        </div>
-        <div id="mapTable"></div>
-        <div id="mapPreview" class="muted"></div>
-        <div class="toolbar">
-          <button class="icon-btn" id="mapImport">Import now</button>
-        </div>
-      </section>
+        <!-- Import -->
+        <section class="card" style="padding:14px">
+          <h2>Import (CSV/XLSX) • Mapping & Workbook</h2>
+          <div class="toolbar">
+            <label class="icon-btn" for="csvFile">Choose CSV/XLSX</label>
+            <input id="csvFile" type="file" accept=".csv,.xlsx,.xls" style="display:none" />
+            <span class="pill">Dataset
+              <select id="mapDataset">
+                <option value="movies">movies</option>
+                <option value="series">series</option>
+                <option value="episodes">episodes</option>
+              </select>
+            </span>
+            <span class="pill">Duplicates
+              <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="chkDupSlug" checked> slug</label>
+              <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="chkDupTitleYear" checked> title+year</label>
+            </span>
+          </div>
+          <div id="mapTable"></div>
+          <div id="mapPreview" class="muted"></div>
+          <div class="toolbar">
+            <button class="icon-btn" id="mapImport">Import now</button>
+          </div>
+        </section>
+      </div>
 
-      <section class="card" style="padding:14px">
-        <h2>Content</h2>
-        <table class="table" id="contentTable">
-          <thead><tr><th>Type</th><th>Title</th><th>Year</th><th>Status</th><th>Platform</th><th>Rating</th><th>Updated</th><th>Actions</th></tr></thead>
-          <tbody></tbody>
-        </table>
-      </section>
+      <!-- ============ TAB: EDIT ============ -->
+      <div id="tab-edit" class="tab-pane">
+        <section class="card" style="padding:14px">
+          <h2>Edit records</h2>
+          <div class="toolbar">
+            <span class="pill">
+              <label>Dataset</label>
+              <select id="editDataset">
+                <option value="movies">movies</option>
+                <option value="series">series</option>
+              </select>
+            </span>
+            <span class="pill" style="flex:1; min-width:260px">
+              <label>Choose item</label>
+              <select id="editSelect" style="width:100%"><option value="">—</option></select>
+            </span>
+            <span class="pill" style="flex:1; min-width:220px">
+              <label>Search</label>
+              <input id="editSearch" placeholder="type to filter by title…"/>
+            </span>
+            <button class="icon-btn" id="editReload">Reload</button>
+          </div>
+
+          <div id="editMeta" class="muted" style="margin:6px 2px 10px"></div>
+
+          <div id="editForm" class="edit-grid"></div>
+
+          <div class="toolbar">
+            <button class="icon-btn" id="editSave">💾 Save changes</button>
+            <button class="icon-btn" id="editDelete">🗑 Soft delete</button>
+          </div>
+        </section>
+      </div>
     </div>
   </main>
 
@@ -115,19 +163,17 @@
     const provider = new GoogleAuthProvider();
     const avatar = document.getElementById('avatar');
     const info   = document.getElementById('authInfo');
+    const db = getFirestore(app);
 
     function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.style.display='block'; setTimeout(()=>t.style.display='none',1800); }
 
     document.getElementById('btnSignIn').addEventListener('click', async()=>{ await signInWithPopup(auth, provider); });
     document.getElementById('btnSignOut').addEventListener('click', async()=>{ await signOut(auth); });
 
-    const db = getFirestore(app);
     let isAuthorized = false;
 
     async function checkAccess(user){
       try{
-        // Verification via Firestore collection "adminUsers"
-        // Example document (id = user.uid): { role: 'admin', active: true, email: 'name@example.com' }
         const ref = doc(db, 'adminUsers', user.uid);
         const snap = await getDoc(ref);
         if(snap.exists()){
@@ -164,7 +210,7 @@
         document.body.dataset.authed = '1';
         isAuthorized = await checkAccess(user);
         setGate({ signedIn:true, authorized:isAuthorized });
-        if(isAuthorized){ fillContentTable(); }
+        if(isAuthorized){ await editReloadList(); }
       } else {
         avatar.style.display='none'; avatar.textContent='';
         info.textContent = 'Not signed in.';
@@ -180,6 +226,16 @@
     const EPISODE_FIELDS = ["series_slug","season_number","episode_number","code","title","air_date","watched","rating","notes","runtime_min"];
 
     function slugify(title, year){ return (title+"-"+year).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,''); }
+
+    // ---------- Tabs ----------
+    document.querySelectorAll('.tab-btn').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        document.querySelectorAll('.tab-btn').forEach(b=> b.classList.remove('active'));
+        document.querySelectorAll('.tab-pane').forEach(p=> p.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('tab-'+btn.dataset.tab).classList.add('active');
+      });
+    });
 
     // ---------- Quick Add ----------
     document.getElementById('btnQuickAdd').addEventListener('click', async()=>{
@@ -206,7 +262,8 @@
       } else {
         await setDoc(doc(db,'series', slug), { id: slug, type:'series', ...base, series_status:'running', platform, episode_length_min:0, seasons:[] }, { merge:true });
       }
-      showToast('Saved'); fillContentTable();
+      showToast('Saved');
+      await editReloadList();
     });
 
     // ---------- Import context ----------
@@ -216,7 +273,6 @@
     function buildMapUI(){
       const dataset = importCtx.dataset;
       if (dataset === 'workbook'){
-        // Kein Mapping nötig – nur Info anzeigen
         const s = importCtx.workbook?.series?.length || 0;
         const se = importCtx.workbook?.seasons?.length || 0;
         const ep = importCtx.workbook?.episodes?.length || 0;
@@ -225,11 +281,10 @@
         document.getElementById('mapPreview').innerHTML = '';
         return;
       }
-
       const fields =
         dataset==='movies'  ? MOVIE_FIELDS  :
         dataset==='series'  ? SERIES_FIELDS :
-        /* episodes */        EPISODE_FIELDS;
+        EPISODE_FIELDS;
 
       importCtx.mapping = Object.fromEntries(fields.map(f=> [f, importCtx.headers.includes(f)? f : ""]));
       const sel = (name,val)=> `<select data-map="${name}"><option value="">(none)</option>${importCtx.headers.map(h=>`<option ${h===val?'selected':''}>${h}</option>`).join('')}</select>`;
@@ -292,7 +347,6 @@
       try{
         const name = (f.name||'').toLowerCase();
         if (name.endsWith('.xlsx') || name.endsWith('.xls')){
-          // Prüfe, ob es ein Workbook mit den drei erwarteten Sheets ist
           const wb = await readWorkbookAllSheets(f);
           const hasAny = (wb.series?.length||0) + (wb.seasons?.length||0) + (wb.episodes?.length||0) > 0;
           if (hasAny){
@@ -301,7 +355,6 @@
             importCtx.headers = []; importCtx.rows = [];
             buildMapUI();
           } else {
-            // Fallback: Erste Tabelle als Mapping-Import
             const rows = await readSingleSheet(f);
             importCtx.headers = rows.length? Object.keys(rows[0]) : [];
             importCtx.rows = rows;
@@ -309,7 +362,6 @@
             buildMapUI();
           }
         } else {
-          // CSV
           await new Promise((resolve)=>{
             Papa.parse(f, { header:true, skipEmptyLines:true, complete: (res)=>{
               importCtx.headers = res.meta.fields||[];
@@ -337,11 +389,11 @@
       if(!(auth.currentUser)){ showToast('Please sign in first'); return; }
       if(!isAuthorized){ showToast('Not authorized'); return; }
 
-      // A) Workbook-Flow: series + seasons + episodes in einem XLSX
+      // Workbook flow
       if (importCtx.dataset === 'workbook'){
         let sAdded=0,sUpdated=0,seaAdded=0,epAdded=0,epUpdated=0,missing=0;
 
-        // 1) SERIES upsert
+        // SERIES
         for (const obj of (importCtx.workbook.series||[])){
           if(!obj.slug || !obj.title_en) continue;
           obj.type = 'series';
@@ -357,7 +409,7 @@
           ex.exists() ? sUpdated++ : sAdded++;
         }
 
-        // 2) SEASONS optional (legt Stubs an / aktualisiert Titel/Note)
+        // SEASONS
         for (const r of (importCtx.workbook.seasons||[])){
           const slug = String(r.series_slug||'').trim(); if(!slug) continue;
           const sNum = Number(r.season_number||0); if(!sNum) continue;
@@ -371,7 +423,7 @@
           await setDoc(sRef, { seasons, updated_at:new Date().toISOString() }, { merge:true });
         }
 
-        // 3) EPISODES upsert (legt fehlende Staffeln automatisch an)
+        // EPISODES
         const pad2 = n => String(Math.max(0, Number(n)||0)).padStart(2,'0');
         const bySeries = {};
         for (const r of (importCtx.workbook.episodes||[])){
@@ -420,18 +472,17 @@
         }
 
         showToast(`Workbook: series +${sAdded}/${sUpdated} • seasons +${seaAdded} • episodes +${epAdded}/${epUpdated}${missing?` • missing series ${missing}`:''}`);
-        fillContentTable?.();
+        await editReloadList();
         return;
       }
 
-      // B) CSV/XLSX Einzelsheet – Mapping für movies / series / episodes
+      // Mapping flow (single sheet CSV/XLSX)
       const fields = (importCtx.dataset==='movies'? MOVIE_FIELDS : importCtx.dataset==='series' ? SERIES_FIELDS : EPISODE_FIELDS);
       const dupSlug = document.getElementById('chkDupSlug').checked;
       const dupTY = document.getElementById('chkDupTitleYear').checked;
       let added=0, skipped=0, duplicates=0, updated=0;
 
       if (importCtx.dataset === 'episodes'){
-        // Episodes upsert gegen bestehende series.<slug>.seasons[].episodes
         const bySeries = {};
         for (const r of importCtx.rows){
           const row = Object.fromEntries(fields.map(f=> [f, importCtx.mapping[f] ? r[importCtx.mapping[f]] : '' ]));
@@ -483,7 +534,7 @@
           await setDoc(sRef, { seasons, updated_at:new Date().toISOString() }, { merge:true });
         }
         showToast(`Episodes: +${added} updated ${updated}${skipped?` • skipped ${skipped}`:''}`);
-        fillContentTable?.();
+        await editReloadList();
         return;
       }
 
@@ -503,7 +554,6 @@
         obj.updated_at = obj.updated_at || new Date().toISOString();
         if(!obj.slug && obj.title_en && obj.year){ obj.slug = slugify(obj.title_en, obj.year); }
 
-        // Requireds
         if(!(obj.title_en && obj.year && obj.poster)){ skipped++; continue; }
         if(type==='movie' && !(obj.genres.length>0 || Number(obj.runtime_min||0)>0)){ skipped++; continue; }
         if(type==='series' && !(obj.genres.length>0 || (obj.platform||''))){ skipped++; continue; }
@@ -519,45 +569,179 @@
         added++;
       }
       showToast(`Imported ${added}, skipped ${skipped}${duplicates? ' (duplicates '+duplicates+')':''}`);
-      fillContentTable();
+      await editReloadList();
     }
-
     document.getElementById('mapImport').addEventListener('click', runImport);
 
-    // ---------- Content list ----------
-    async function fillContentTable(){
-      const tbody = document.querySelector('#contentTable tbody');
-      tbody.innerHTML='';
-      for (const name of ['movies','series']){
-        try{
-          const snap = await getDocs(query(collection(db, name), orderBy('updated_at','desc')));
-          snap.forEach(docSnap=>{
-            const x = { type: name.slice(0,-1), id: docSnap.id, ...docSnap.data() };
-            const tr = document.createElement('tr');
-            tr.innerHTML = `<td>${x.type}</td><td>${x.title_en||''}</td><td>${x.year||''}</td><td>${x.status||''}</td><td>${x.platform||''}</td><td>${x.rating||0}</td><td>${(x.updated_at||'').slice(0,10)}</td><td><button class='icon-btn' data-del='${name}|${x.id}'>Delete</button></td>`;
-            tbody.appendChild(tr);
-          });
-        }catch(err){
-          const snap = await getDocs(collection(db, name)); // Fallback ohne orderBy
-          snap.forEach(docSnap=>{
-            const x = { type: name.slice(0,-1), id: docSnap.id, ...docSnap.data() };
-            const tr = document.createElement('tr');
-            tr.innerHTML = `<td>${x.type}</td><td>${x.title_en||''}</td><td>${x.year||''}</td><td>${x.status||''}</td><td>${x.platform||''}</td><td>${x.rating||0}</td><td>${(x.updated_at||'').slice(0,10)}</td><td><button class='icon-btn' data-del='${name}|${x.id}'>Delete</button></td>`;
-            tbody.appendChild(tr);
-          });
-        }
+    // ---------- File input dataset react ----------
+    // (handled in change listener above)
+
+    // ---------- EDIT TAB ----------
+    const editState = { dataset:'movies', list:[], currentId:'', currentDoc:null };
+
+    document.getElementById('editDataset').addEventListener('change', async (e)=>{ editState.dataset = e.target.value; await editReloadList(); });
+    document.getElementById('editReload').addEventListener('click', editReloadList);
+    document.getElementById('editSearch').addEventListener('input', ()=> fillEditSelect());
+
+    async function editReloadList(){
+      if(!isAuthorized) return;
+      const coll = editState.dataset;
+      const out=[];
+      try{
+        const snap = await getDocs(query(collection(db, coll), orderBy('title_en','asc')));
+        snap.forEach(d=> out.push({ id:d.id, ...d.data() }));
+      }catch{
+        const snap = await getDocs(collection(db, coll));
+        snap.forEach(d=> out.push({ id:d.id, ...d.data() }));
       }
-      tbody.querySelectorAll('[data-del]').forEach(btn=> btn.addEventListener('click', async()=>{
-        if(!(auth.currentUser) || !isAuthorized){ showToast('Not authorized'); return; }
-        const [coll, id] = btn.dataset.del.split('|');
-        const ref = doc(db, coll, id);
-        await setDoc(ref, { __deleted:true }, { merge:true }); // soft delete
-        showToast('Marked as deleted (soft delete)');
-        fillContentTable();
-      }));
+      // basic sort if fallback
+      out.sort((a,b)=> (a.title_en||'').localeCompare(b.title_en||''));
+      editState.list = out;
+      fillEditSelect();
     }
 
-    // No eager calls; admin content activates after authorization.
+    function fillEditSelect(){
+      const sel = document.getElementById('editSelect');
+      const q = (document.getElementById('editSearch').value||'').toLowerCase();
+      const items = editState.list.filter(x=> !q || (x.title_en||'').toLowerCase().includes(q));
+      sel.innerHTML = '<option value="">—</option>' + items.map(x=>{
+        const label = `${x.title_en||'(no title)'} ${x.year? '('+x.year+')':''} — ${x.slug||x.id}`;
+        return `<option value="${x.id}">${label}</option>`;
+      }).join('');
+      document.getElementById('editMeta').textContent = `${items.length} items`;
+      document.getElementById('editForm').innerHTML = '';
+      editState.currentId = ''; editState.currentDoc = null;
+    }
+
+    document.getElementById('editSelect').addEventListener('change', async (e)=>{
+      const id = e.target.value;
+      if(!id){ document.getElementById('editForm').innerHTML=''; return; }
+      const coll = editState.dataset;
+      const ref = doc(db, coll, id);
+      const snap = await getDoc(ref);
+      if(!snap.exists()){ showToast('Item not found'); return; }
+      editState.currentId = id;
+      editState.currentDoc = { id, ...snap.data() };
+      buildEditForm();
+    });
+
+    function fieldRow(id,label,html){ return `<div class="field"><label for="${id}">${label}</label>${html}</div>`; }
+    function text(id,ph='',val=''){ return `<input id="${id}" value="${val??''}" placeholder="${ph}"/>`; }
+    function num(id,ph='',val=''){ return `<input id="${id}" type="number" value="${val??''}" placeholder="${ph}"/>`; }
+    function ta(id,ph='',val=''){ return `<textarea id="${id}" rows="3" placeholder="${ph}">${val??''}</textarea>`; }
+    function cb(id,checked){ return `<label style="display:flex;align-items:center;gap:8px"><input id="${id}" type="checkbox" ${checked?'checked':''}/> <span>${id.includes('Fav')?'favorite':'enabled'}</span></label>`; }
+
+    function buildEditForm(){
+      const d = editState.currentDoc || {};
+      const isMovie = (editState.dataset==='movies');
+
+      const common = [
+        fieldRow('efSlug','Slug', `<input id="efSlug" value="${d.slug||d.id||''}" class="readonly" disabled/>`),
+        fieldRow('efTitle','Title (EN)', text('efTitle','', d.title_en||'')),
+        fieldRow('efOrig','Original title', text('efOrig','', d.title_original||'')),
+        fieldRow('efYear','Year', num('efYear','', d.year||'')),
+        fieldRow('efPoster','Poster URL', text('efPoster','https://…', d.poster||'')),
+        fieldRow('efBackdrop','Backdrop URL', text('efBackdrop','https://…', d.backdrop||'')),
+        fieldRow('efDesc','Short description', ta('efDesc','', d.short_description||'')),
+        fieldRow('efGenres','Genres (| separated)', text('efGenres','Action|Sci-Fi', (d.genres||[]).join('|'))),
+        fieldRow('efAge','Age rating', text('efAge','PG-13 / FSK 16', d.age_rating||'')),
+        fieldRow('efStatus','Status', text('efStatus','Plan to Watch / In Progress / Completed', d.status||'')),
+        fieldRow('efRating','Rating (0–5)', num('efRating','', d.rating||0)),
+        fieldRow('efFav','Favorite', cb('efFav', !!d.favorite)),
+        fieldRow('efWl','On watchlist', cb('efWl', !!d.on_watchlist)),
+        fieldRow('efTags','Tags (| separated)', text('efTags','Sci-Fi|Classic', (d.tags||[]).join('|')))
+      ];
+
+      const movieOnly = [
+        fieldRow('efRuntime','Runtime (min)', num('efRuntime','', d.runtime_min||'')),
+        fieldRow('efRel','Release date (YYYY-MM-DD)', text('efRel','2024-12-31', d.release_date||'')),
+        fieldRow('efFranchise','Franchise', text('efFranchise','Marvel / —', d.franchise||'')),
+        fieldRow('efPos','Last position (sec)', num('efPos','', d.last_position_seconds||0))
+      ];
+      const seriesOnly = [
+        fieldRow('efPlatform','Platform', text('efPlatform','Netflix', d.platform||'')),
+        fieldRow('efEpLen','Episode length (min)', num('efEpLen','', d.episode_length_min||'')),
+        fieldRow('efSeriesStatus','Series status', text('efSeriesStatus','running / ended', d.series_status||''))
+      ];
+
+      const html = (isMovie ? [...common, ...movieOnly] : [...common, ...seriesOnly]).join('');
+      document.getElementById('editForm').innerHTML = html;
+
+      document.getElementById('editMeta').innerHTML =
+        `Editing <strong>${d.title_en||'(no title)'}</strong> (${d.year||'—'}) • <span class="muted">id/slug: ${d.slug||d.id}</span>`;
+    }
+
+    document.getElementById('editSave').addEventListener('click', async ()=>{
+      if(!(auth.currentUser) || !isAuthorized){ showToast('Not authorized'); return; }
+      if(!editState.currentId){ showToast('Pick an item first'); return; }
+      const isMovie = (editState.dataset==='movies');
+      const coll = editState.dataset;
+      const id   = editState.currentId;
+      const ref  = doc(db, coll, id);
+
+      const val = (id)=> (document.getElementById(id)?.value ?? '').trim();
+      const numVal = (id)=> Number(val(id)||0) || 0;
+      const boolVal = (id)=> !!document.getElementById(id)?.checked;
+
+      const base = {
+        title_en: val('efTitle'),
+        title_original: val('efOrig'),
+        year: numVal('efYear'),
+        poster: val('efPoster'),
+        backdrop: val('efBackdrop'),
+        short_description: document.getElementById('efDesc')?.value || '',
+        genres: (val('efGenres')||'').split('|').filter(Boolean),
+        age_rating: val('efAge'),
+        status: val('efStatus'),
+        rating: Number(val('efRating')||0) || 0,
+        favorite: boolVal('efFav'),
+        on_watchlist: boolVal('efWl'),
+        tags: (val('efTags')||'').split('|').filter(Boolean),
+        updated_at: new Date().toISOString()
+      };
+
+      let patch = {};
+      if(isMovie){
+        patch = {
+          ...base,
+          type:'movie',
+          runtime_min: numVal('efRuntime'),
+          release_date: val('efRel'),
+          franchise: val('efFranchise') || null,
+          last_position_seconds: numVal('efPos')
+        };
+      } else {
+        patch = {
+          ...base,
+          type:'series',
+          platform: val('efPlatform'),
+          episode_length_min: numVal('efEpLen'),
+          series_status: val('efSeriesStatus')
+        };
+      }
+
+      await setDoc(ref, patch, { merge:true });
+      showToast('Saved changes');
+      await editReloadList();
+      // keep selection
+      document.getElementById('editSelect').value = id;
+    });
+
+    document.getElementById('editDelete').addEventListener('click', async ()=>{
+      if(!(auth.currentUser) || !isAuthorized){ showToast('Not authorized'); return; }
+      if(!editState.currentId){ showToast('Pick an item first'); return; }
+      const coll = editState.dataset;
+      const id   = editState.currentId;
+      await setDoc(doc(db, coll, id), { __deleted:true, updated_at:new Date().toISOString() }, { merge:true });
+      showToast('Marked as deleted (soft delete)');
+      await editReloadList();
+    });
+
+    // ---------- Import wire ----------
+    document.getElementById('mapImport').addEventListener('click', runImport);
+
+    // ---------- File dataset change already handled ----------
+
   </script>
 </body>
 </html>
