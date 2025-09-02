@@ -576,7 +576,7 @@
     // ---------- EDIT TAB ----------
     const editState = { dataset:'movies', list:[], currentId:'', currentDoc:null };
 
-    // NEW: normalize dataset names (defensiv)
+    // normalize dataset names (defensiv)
     const normalizeDataset = (v) => (v === 'movie' ? 'movies' : v === 'series' ? 'series' : v);
 
     document.getElementById('editDataset').addEventListener('change', async (e)=>{ 
@@ -592,10 +592,10 @@
       const out=[];
       try{
         const snap = await getDocs(query(collection(db, coll), orderBy('title_en','asc')));
-        snap.forEach(d=> out.push({ id:d.id, ...d.data() }));
+        snap.forEach(d=> out.push({ docId:d.id, ...d.data() }));   // << store docId, don't overwrite with data.id
       }catch{
         const snap = await getDocs(collection(db, coll));
-        snap.forEach(d=> out.push({ id:d.id, ...d.data() }));
+        snap.forEach(d=> out.push({ docId:d.id, ...d.data() }));
       }
       // Filter soft-deleted & sort
       const clean = out.filter(x=> x.__deleted !== true)
@@ -609,37 +609,23 @@
       const q = (document.getElementById('editSearch').value||'').toLowerCase();
       const items = editState.list.filter(x=> !q || (x.title_en||'').toLowerCase().includes(q));
       sel.innerHTML = '<option value="">—</option>' + items.map(x=>{
-        const label = `${x.title_en||'(no title)'} ${x.year? '('+x.year+')':''} — ${x.slug||x.id}`;
-        // value = echte Doc-ID, nicht slug
-        return `<option value="${x.id}">${label}</option>`;
+        const label = `${x.title_en||'(no title)'} ${x.year? '('+x.year+')':''} — ${x.slug||x.docId}`;
+        return `<option value="${x.docId}">${label}</option>`;     // value = real docId
       }).join('');
       document.getElementById('editMeta').textContent = `${items.length} items`;
       document.getElementById('editForm').innerHTML = '';
       editState.currentId = ''; editState.currentDoc = null;
     }
 
-    // NEW: robust lookup – erst Doc-ID, dann slug-Fallback
-    async function resolveDocByIdOrSlug(collName, key) {
-      collName = normalizeDataset(collName);
-      // a) per Doc-ID
-      let snap = await getDoc(doc(db, collName, key));
-      if (snap.exists()) return snap;
-      // b) Fallback: suche per slug
-      const all = await getDocs(collection(db, collName));
-      const hit = all.docs.find(d => (d.data()?.slug || '') === key);
-      return hit || null;
-    }
-
     document.getElementById('editSelect').addEventListener('change', async (e)=>{
-      const id = e.target.value;
+      const id = e.target.value;                            // docId
       if(!id){ document.getElementById('editForm').innerHTML=''; return; }
       const coll = normalizeDataset(editState.dataset);
-
-      const snap = await resolveDocByIdOrSlug(coll, id);
-      if(!snap){ showToast(`Item not found in ${coll}: ${id}`); return; }
-
-      editState.currentId = snap.id;
-      editState.currentDoc = { id: snap.id, ...snap.data() };
+      const ref = doc(db, coll, id);
+      const snap = await getDoc(ref);
+      if(!snap.exists()){ showToast(`Item not found in ${coll}: ${id}`); return; }
+      editState.currentId = id;
+      editState.currentDoc = { docId:id, ...snap.data() };
       buildEditForm();
     });
 
@@ -654,7 +640,7 @@
       const isMovie = (normalizeDataset(editState.dataset)==='movies');
 
       const common = [
-        fieldRow('efSlug','Slug', `<input id="efSlug" value="${d.slug||d.id||''}" class="readonly" disabled/>`),
+        fieldRow('efSlug','Slug', `<input id="efSlug" value="${d.slug||d.docId||''}" class="readonly" disabled/>`),
         fieldRow('efTitle','Title (EN)', text('efTitle','', d.title_en||'')),
         fieldRow('efOrig','Original title', text('efOrig','', d.title_original||'')),
         fieldRow('efYear','Year', num('efYear','', d.year||'')),
@@ -686,7 +672,7 @@
       document.getElementById('editForm').innerHTML = html;
 
       document.getElementById('editMeta').innerHTML =
-        `Editing <strong>${d.title_en||'(no title)'}</strong> (${d.year||'—'}) • <span class="muted">id/slug: ${d.slug||d.id}</span>`;
+        `Editing <strong>${d.title_en||'(no title)'}</strong> (${d.year||'—'}) • <span class="muted">id/slug: ${d.slug||d.docId}</span>`;
     }
 
     document.getElementById('editSave').addEventListener('click', async ()=>{
@@ -757,7 +743,6 @@
 
     // ---------- Import wire ----------
     document.getElementById('mapImport').addEventListener('click', runImport);
-
   </script>
 </body>
 </html>
